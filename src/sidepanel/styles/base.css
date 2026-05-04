@@ -64,6 +64,20 @@ body {
 
 .icon-btn:hover { background: #2a2a2a; color: #f0f0f0; }
 
+/* ヘッダ内の言語クイック切替セレクト（F-201） */
+.header-actions select {
+  background: #222;
+  border: 1px solid #444;
+  color: #d1d5db;
+  border-radius: 5px;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  height: 26px;
+}
+.header-actions select:focus { outline: none; border-color: #3b82f6; }
+
 /* URL バー */
 .url-bar {
   display: flex;
@@ -371,6 +385,27 @@ body {
 .chat-actions .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 短文警告ブロック（F-203） */
+.short-content-warning {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: #2d2000;
+  border: 1px solid #7c5800;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #fcd34d;
+}
+
+.short-content-warning .warning-text {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.short-content-warning .warning-actions {
+  display: flex;
+  gap: 8px;
 }
 
 /* スクリーンリーダー専用 */

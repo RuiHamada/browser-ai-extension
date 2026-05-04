@@ -10,17 +10,23 @@ export const AVAILABLE_MODELS = [
 /** 利用可能なモデル ID のユニオン型 */
 export type AiModelId = typeof AVAILABLE_MODELS[number]['value'];
 
+/** 出力言語の選択肢 */
+export type OutputLanguage = 'en' | 'ja';
+
 // 拡張機能の設定
 export interface Settings {
   apiKey: string;
   /** 利用可能なモデル ID のみ許可（許可リスト外はストレージ読み込み時にフォールバック） */
   aiModel: AiModelId;
+  /** AI 出力言語（'en': English / 'ja': Japanese）、デフォルトは 'en' */
+  outputLanguage: OutputLanguage;
 }
 
 // デフォルト設定値
 export const DEFAULT_SETTINGS: Settings = {
   apiKey: '',
   aiModel: 'claude-haiku-4-5',
+  outputLanguage: 'en',
 };
 
 /** Chatの一往復メッセージ（role と content のペア） */
@@ -33,7 +39,13 @@ export type BackgroundMessage =
   | { type: 'OPEN_SIDE_PANEL' }
   | { type: 'GET_SETTINGS' }
   | { type: 'SAVE_SETTINGS'; settings: Partial<Settings> }
-  | { type: 'EXPLAIN'; content: string }
+  /** ページ全体モード: content のみ送信（F-005 既存） */
+  | { type: 'EXPLAIN'; mode: 'whole'; content: string }
+  /**
+   * 選択モード: 選択テキストとページ本文を両方送信（F-301）
+   * pageContent が空のときはフォールバック（選択テキストのみで Explain）
+   */
+  | { type: 'EXPLAIN'; mode: 'selection'; selectionText: string; pageContent: string }
   | {
       type: 'CHAT';
       /** 最新のユーザー入力 */

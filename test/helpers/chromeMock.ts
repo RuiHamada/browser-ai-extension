@@ -16,6 +16,12 @@ export interface ChromeMock {
       get: ReturnType<typeof vi.fn>;
       set: ReturnType<typeof vi.fn>;
     };
+    onChanged: {
+      _listeners: Function[];
+      addListener: ReturnType<typeof vi.fn>;
+      /** テスト用ヘルパー: onChanged イベントを手動でトリガーする */
+      _trigger: (changes: Record<string, { newValue?: unknown; oldValue?: unknown }>, area: string) => void;
+    };
   };
   runtime: {
     sendMessage: ReturnType<typeof vi.fn>;
@@ -40,6 +46,9 @@ export interface ChromeMock {
 export function installChromeMock(): ChromeMock {
   const localData: Record<string, unknown> = {};
   const syncData: Record<string, unknown> = {};
+
+  // onChanged リスナーのリスト（storage.onChanged 用）
+  const onChangedListeners: Function[] = [];
 
   const mock: ChromeMock = {
     storage: {
@@ -75,6 +84,17 @@ export function installChromeMock(): ChromeMock {
           Object.assign(syncData, items);
           if (cb) cb();
         }),
+      },
+      onChanged: {
+        _listeners: onChangedListeners,
+        addListener: vi.fn(function (fn: Function) {
+          onChangedListeners.push(fn);
+        }),
+        _trigger: (changes, area) => {
+          for (const fn of onChangedListeners) {
+            fn(changes, area);
+          }
+        },
       },
     },
     runtime: {

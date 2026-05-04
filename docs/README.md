@@ -21,3 +21,5 @@
 | ID | ディレクトリ | 概要 | ステータス |
 |----|--------------|------|-----------|
 | 001 | [001-explain-and-chat](features/001-explain-and-chat/) | 任意 Web ページの DOM を読み、英文 Explain と Chat を提供する Chrome 拡張の初期実装 | 完了（Sprint 1-3 / Codex 全 NO ISSUES） |
+| 002 | [002-output-language-and-robust-extract](features/002-output-language-and-robust-extract/) | 出力言語切替（English/Japanese）と DOM 抽出堅牢化（main/article 優先・Shadow DOM・短文警告） | 完了（Sprint 4-5 / Codex 全 NO ISSUES） |
+| 003 | [003-selection-with-context](features/003-selection-with-context/) | Selection Explain にページ本文を文脈として併送、選択モード時の警告抑止 | 完了（Sprint 6 / Codex NO ISSUES） |

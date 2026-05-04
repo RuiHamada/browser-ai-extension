@@ -1,7 +1,8 @@
-// サイドパネルのエントリポイント（F-009, F-010, F-005, F-007）
+// サイドパネルのエントリポイント（F-009, F-010, F-005, F-007, F-201）
 
-import { hasApiKey } from '../lib/storage.js';
-import type { BroadcastMessage } from '../types/messages.js';
+import { hasApiKey, validateOutputLanguage } from '../lib/storage.js';
+import type { BroadcastMessage, OutputLanguage } from '../types/messages.js';
+import { DEFAULT_SETTINGS } from '../types/messages.js';
 import { initExplain, resetExplain } from './explain.js';
 import { initChat, resetChat } from './chat.js';
 
@@ -106,9 +107,45 @@ chrome.runtime.onMessage.addListener((message: BroadcastMessage, _sender, _sendR
   return undefined;
 });
 
+// ----------------------------------------------------------------
+// 出力言語クイック切替（F-201）
+// ----------------------------------------------------------------
+
+/** セレクト要素に現在の言語値を反映する */
+function applyOutputLanguageToSelect(lang: OutputLanguage): void {
+  const sel = document.getElementById('outputLanguageSelect') as HTMLSelectElement | null;
+  if (sel) sel.value = lang;
+}
+
+/** ストレージから outputLanguage を読んでセレクトに反映する */
+function syncOutputLanguageFromStorage(): void {
+  chrome.storage.local.get(['outputLanguage'], (data) => {
+    applyOutputLanguageToSelect(validateOutputLanguage(data['outputLanguage']));
+  });
+}
+
+// セレクト変更時にストレージへ保存（即時反映）
+const outputLangSel = document.getElementById('outputLanguageSelect') as HTMLSelectElement | null;
+if (outputLangSel) {
+  outputLangSel.addEventListener('change', () => {
+    const lang = validateOutputLanguage(outputLangSel.value);
+    chrome.storage.local.set({ outputLanguage: lang });
+  });
+}
+
+// Options ページでの変更を Side Panel に同期する（chrome.storage.onChanged）
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if ('outputLanguage' in changes) {
+    const newVal = changes['outputLanguage']?.newValue;
+    applyOutputLanguageToSelect(validateOutputLanguage(newVal));
+  }
+});
+
 // 初期化
 void displayCurrentUrl();
 void checkAndShowApiKeyWarning();
+syncOutputLanguageFromStorage();
 initTabs();
 initExplain();
 initChat();

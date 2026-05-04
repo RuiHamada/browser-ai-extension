@@ -147,3 +147,102 @@ describe('options ページ', () => {
     expect(select.value).toBe('claude-opus-4-7');
   });
 });
+
+// ----------------------------------------------------------------
+// Options ページ: chrome.storage.onChanged による双方向同期（F-201）
+// Side Panel で言語変更 → Options の select が自動更新される
+// ----------------------------------------------------------------
+describe('options ページ: chrome.storage.onChanged 同期', () => {
+  // このテスト群は outputLanguage select を含む完全な DOM を使う
+  function setupDomWithLanguage(): void {
+    document.body.innerHTML = `
+      <input type="password" id="apiKey" />
+      <span id="apiKeyMask" class="api-key-mask"></span>
+      <select id="aiModel">
+        <option value="claude-haiku-4-5">Haiku</option>
+        <option value="claude-sonnet-4-6">Sonnet</option>
+      </select>
+      <select id="outputLanguage">
+        <option value="en">English</option>
+        <option value="ja">Japanese</option>
+      </select>
+      <button id="btnSave"></button>
+      <button id="btnClearApiKey"></button>
+      <div id="saveStatus" class="status"></div>
+    `;
+  }
+
+  beforeEach(() => {
+    // 標準 DOM をリセットして言語 select 付き DOM に差し替える
+    document.body.innerHTML = '';
+    setupDomWithLanguage();
+    vi.resetModules();
+  });
+
+  it('storage.onChanged で outputLanguage="ja" が来ると select が "ja" に更新される', async () => {
+    await import('../src/options/options.js');
+    const sel = document.getElementById('outputLanguage') as HTMLSelectElement;
+    expect(sel.value).toBe('en'); // 初期値
+
+    // Side Panel が ja に変更したことをシミュレート
+    mock.storage.onChanged._trigger(
+      { outputLanguage: { newValue: 'ja', oldValue: 'en' } },
+      'local',
+    );
+    expect(sel.value).toBe('ja');
+  });
+
+  it('storage.onChanged で area="sync" の場合は select が更新されない', async () => {
+    await import('../src/options/options.js');
+    const sel = document.getElementById('outputLanguage') as HTMLSelectElement;
+    expect(sel.value).toBe('en');
+
+    // sync 領域の変更は無視される
+    mock.storage.onChanged._trigger(
+      { outputLanguage: { newValue: 'ja', oldValue: 'en' } },
+      'sync',
+    );
+    expect(sel.value).toBe('en');
+  });
+
+  it('storage.onChanged で不正値 "fr" が来た場合はデフォルト "en" にフォールバックして反映される', async () => {
+    mock.storage.local._data['outputLanguage'] = 'ja';
+    await import('../src/options/options.js');
+    const sel = document.getElementById('outputLanguage') as HTMLSelectElement;
+    expect(sel.value).toBe('ja');
+
+    // 不正値が来た場合
+    mock.storage.onChanged._trigger(
+      { outputLanguage: { newValue: 'fr', oldValue: 'ja' } },
+      'local',
+    );
+    // validateOutputLanguage を経由して 'en' にフォールバック
+    expect(sel.value).toBe('en');
+  });
+
+  it('storage.onChanged で aiModel が変更されると select が更新される（別タブ整合性）', async () => {
+    mock.storage.local._data['aiModel'] = 'claude-haiku-4-5';
+    await import('../src/options/options.js');
+    const sel = document.getElementById('aiModel') as HTMLSelectElement;
+    expect(sel.value).toBe('claude-haiku-4-5');
+
+    // 別タブの Options で aiModel を変更したことをシミュレート
+    mock.storage.onChanged._trigger(
+      { aiModel: { newValue: 'claude-sonnet-4-6', oldValue: 'claude-haiku-4-5' } },
+      'local',
+    );
+    expect(sel.value).toBe('claude-sonnet-4-6');
+  });
+
+  it('storage.onChanged で aiModel の area="sync" は無視される', async () => {
+    mock.storage.local._data['aiModel'] = 'claude-haiku-4-5';
+    await import('../src/options/options.js');
+    const sel = document.getElementById('aiModel') as HTMLSelectElement;
+
+    mock.storage.onChanged._trigger(
+      { aiModel: { newValue: 'claude-sonnet-4-6', oldValue: 'claude-haiku-4-5' } },
+      'sync',
+    );
+    expect(sel.value).toBe('claude-haiku-4-5');
+  });
+});

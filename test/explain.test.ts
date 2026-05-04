@@ -12,6 +12,13 @@ function setupDom(): void {
     <button id="btnExplainWhole">Explain whole page</button>
     <button id="btnExplainSelection">Selection only</button>
     <div id="explainLoading" class="hidden"></div>
+    <div id="shortContentWarning" class="hidden" role="alert">
+      <p id="shortContentWarningText"></p>
+      <div>
+        <button id="btnRunAnyway">Run anyway</button>
+        <button id="btnCancelShort">Cancel</button>
+      </div>
+    </div>
     <div id="truncatedNotice" class="hidden"></div>
     <div id="explainError" class="hidden"></div>
     <div id="explainResult" class="hidden"></div>
@@ -51,12 +58,13 @@ describe('explain タブ初期化', () => {
 
 describe('Explain whole page（F-005）', () => {
   it('ページ全体Explainでresultが表示される', async () => {
-    // chrome.tabs.sendMessage (GET_PAGE_CONTENT) のモック
+    // chrome.tabs.sendMessage (GET_PAGE_CONTENT) のモック（40文字以上: 短文警告なし）
+    const longContent = 'Article text here. This is a long enough content for normal flow.';
     setupTabsSendMessage({
       url: 'https://example.com',
-      content: 'Article text here.',
+      content: longContent,
       truncated: false,
-      originalLength: 18,
+      originalLength: longContent.length,
     });
     // chrome.runtime.sendMessage (EXPLAIN) のモック
     mock.runtime.sendMessage = vi.fn(() =>
@@ -112,11 +120,13 @@ describe('Explain whole page（F-005）', () => {
   });
 
   it('APIエラー時にエラーメッセージが表示される（F-011）', async () => {
+    // 40文字以上: 短文警告なし
+    const longContent = 'Some content that is long enough to bypass the short content warning.';
     setupTabsSendMessage({
       url: 'https://example.com',
-      content: 'Some content',
+      content: longContent,
       truncated: false,
-      originalLength: 12,
+      originalLength: longContent.length,
     });
     mock.runtime.sendMessage = vi.fn(() =>
       Promise.resolve({ error: 'Authentication error (401): Your API key is invalid.' })
@@ -134,11 +144,12 @@ describe('Explain whole page（F-005）', () => {
   });
 
   it('エラーメッセージにAPIキーが含まれない（F-011）', async () => {
+    const longContent = 'Some content that is long enough to bypass the short content warning threshold.';
     setupTabsSendMessage({
       url: 'https://example.com',
-      content: 'Some content',
+      content: longContent,
       truncated: false,
-      originalLength: 12,
+      originalLength: longContent.length,
     });
     // エラーにAPIキーが混入した場合でも sanitize される
     mock.runtime.sendMessage = vi.fn(() =>
@@ -156,11 +167,12 @@ describe('Explain whole page（F-005）', () => {
   });
 
   it('console.error にAPIキーが出力されない（F-011: ログ経路での漏洩防止）', async () => {
+    const longContent = 'Some content that is long enough to bypass the short content warning threshold.';
     setupTabsSendMessage({
       url: 'https://example.com',
-      content: 'Some content',
+      content: longContent,
       truncated: false,
-      originalLength: 12,
+      originalLength: longContent.length,
     });
     // APIキーを含む Error を runtime.sendMessage が投げる
     mock.runtime.sendMessage = vi.fn(() =>
@@ -188,11 +200,13 @@ describe('Explain whole page（F-005）', () => {
 
   it('実行中はボタンが disabled になる（ローディング状態）', async () => {
     let resolveExplain!: (v: unknown) => void;
+    // 40文字以上: 短文警告なしで即ローディング状態になる
+    const longContent = 'Content that is long enough to bypass the short content warning threshold.';
     setupTabsSendMessage({
       url: 'https://example.com',
-      content: 'Content',
+      content: longContent,
       truncated: false,
-      originalLength: 7,
+      originalLength: longContent.length,
     });
     mock.runtime.sendMessage = vi.fn(() =>
       new Promise((resolve) => { resolveExplain = resolve; })
@@ -218,8 +232,29 @@ describe('Explain whole page（F-005）', () => {
 
 describe('Explain selection only（F-004）', () => {
   it('選択テキストがある場合はそのテキストでExplainが実行される', async () => {
-    // GET_SELECTED_TEXT
-    setupTabsSendMessage({ selectedText: 'Selected paragraph text.' });
+    // GET_SELECTED_TEXT の後、GET_PAGE_CONTENT も取得する（F-301）
+    // tabs.sendMessage を順次呼び出すためにモックを順番に返す
+    const longSelected = 'Selected paragraph text that is long enough to bypass the warning.';
+    const pageContent = 'Page body context for the selection.';
+    let sendMessageCallCount = 0;
+    (mock as unknown as {
+      tabs: { sendMessage: ReturnType<typeof vi.fn> };
+    }).tabs.sendMessage = vi.fn(() => {
+      sendMessageCallCount++;
+      if (sendMessageCallCount === 1) {
+        // 1回目: GET_SELECTED_TEXT
+        return Promise.resolve({ selectedText: longSelected });
+      }
+      // 2回目: GET_PAGE_CONTENT
+      return Promise.resolve({
+        url: 'https://example.com',
+        content: pageContent,
+        truncated: false,
+        originalLength: pageContent.length,
+      });
+    });
+    (globalThis as unknown as { chrome: typeof mock }).chrome = mock;
+
     mock.runtime.sendMessage = vi.fn(() =>
       Promise.resolve({ text: 'Explanation of selected text.' })
     );
@@ -234,11 +269,12 @@ describe('Explain selection only（F-004）', () => {
     expect(result.classList.contains('hidden')).toBe(false);
     expect(result.textContent).toContain('Explanation of selected text.');
 
-    // EXPLAIN メッセージのコンテンツが選択テキストを含むことを確認
+    // EXPLAIN メッセージが選択モードで selectionText を含むことを確認（F-301）
     const explainCall = mock.runtime.sendMessage.mock.calls[0];
-    const explainMsg = explainCall[0] as { type: string; content: string };
+    const explainMsg = explainCall[0] as { type: string; mode: string; selectionText: string };
     expect(explainMsg.type).toBe('EXPLAIN');
-    expect(explainMsg.content).toContain('Selected paragraph text.');
+    expect(explainMsg.mode).toBe('selection');
+    expect(explainMsg.selectionText).toContain(longSelected);
   });
 
   it('選択が空の場合はエラーメッセージが表示される（F-004）', async () => {

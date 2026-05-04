@@ -14,6 +14,11 @@
       <span class="header-title">Browser AI Companion</span>
     </div>
     <div class="header-actions">
+      <!-- 出力言語クイック切替（F-201） -->
+      <select id="outputLanguageSelect" title="Output language" aria-label="Output language">
+        <option value="en">EN</option>
+        <option value="ja">JA</option>
+      </select>
       <button class="icon-btn" id="btnSettings" title="Settings">&#x2699;</button>
     </div>
   </header>
@@ -62,6 +67,15 @@
       <div class="loading hidden" id="explainLoading" aria-live="polite">
         <span class="loading-spinner" aria-hidden="true"></span>
         <span>Generating explanation...</span>
+      </div>
+
+      <!-- 短文警告ブロック（F-203） -->
+      <div class="short-content-warning hidden" id="shortContentWarning" role="alert">
+        <p class="warning-text" id="shortContentWarningText"></p>
+        <div class="warning-actions">
+          <button class="btn btn-primary" id="btnRunAnyway" type="button">Run anyway</button>
+          <button class="btn btn-secondary" id="btnCancelShort" type="button">Cancel</button>
+        </div>
       </div>
 
       <!-- 切り詰め通知（F-012） -->

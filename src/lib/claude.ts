@@ -100,24 +100,65 @@ export async function callClaudeAPI(payload: ClaudePayload): Promise<ClaudeRespo
 /** デフォルトモデル */
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 
-/** デフォルトシステムプロンプト（英語解説モード、F-013） */
+/** デフォルトシステムプロンプト（言語指定なし汎用） */
 const DEFAULT_SYSTEM =
   'You are a helpful assistant. Always respond in English. ' +
   'Be concise and clear.';
 
-/** Chatのシステムプロンプト（F-006: ページ文脈チャット、英語固定） */
-export const CHAT_SYSTEM_PROMPT_BASE =
-  'You are a helpful assistant. Always respond in English. ' +
-  'Answer questions clearly and concisely based on the provided web page content. ' +
-  'If the user asks about something not covered in the page content, answer from your general knowledge but clarify that.';
+/** 言語コードを "English" / "Japanese" の表示名に変換する */
+function languageLabel(lang: 'en' | 'ja'): string {
+  return lang === 'ja' ? 'Japanese' : 'English';
+}
 
-/** Explainのシステムプロンプト（F-005, F-013: 英語固定） */
-export const EXPLAIN_SYSTEM_PROMPT =
-  'You are a helpful reading assistant. ' +
-  'Always respond in English. ' +
-  'When given web page content, provide a clear and concise explanation in English. ' +
-  'Focus on the main points and key information. ' +
-  'Use bullet points or short paragraphs for readability.';
+/**
+ * Explainのシステムプロンプトを返す（F-005, F-013, F-201: 出力言語切替対応）
+ * 言語ごとに "Always respond in {English|Japanese}." を動的に組み立てる
+ */
+export function getExplainSystemPrompt(lang: 'en' | 'ja' = 'en'): string {
+  const label = languageLabel(lang);
+  return (
+    'You are a helpful reading assistant. ' +
+    `Always respond in ${label}. ` +
+    `When given web page content, provide a clear and concise explanation in ${label}. ` +
+    'Focus on the main points and key information. ' +
+    'Use bullet points or short paragraphs for readability.'
+  );
+}
+
+/**
+ * 短文入力に対応したExplainシステムプロンプトを返す（F-204）
+ * 入力が単語・短いフレーズ・短い式の場合、その意味・用法・典型的な文脈を解説するよう指示する
+ */
+export function getShortExplainSystemPrompt(lang: 'en' | 'ja' = 'en'): string {
+  const label = languageLabel(lang);
+  return (
+    'You are a helpful reading assistant. ' +
+    `Always respond in ${label}. ` +
+    'The input is a short word, phrase, or code expression. ' +
+    `Explain the meaning, usage, and typical context of the given short word/phrase/expression in ${label}. ` +
+    'Be concise but informative. Use bullet points or short paragraphs for readability.'
+  );
+}
+
+/**
+ * Chatのシステムプロンプトのベースを返す（F-006, F-201: 出力言語切替対応）
+ * 言語ごとに "Always respond in {English|Japanese}." を動的に組み立てる
+ */
+export function getChatSystemPromptBase(lang: 'en' | 'ja' = 'en'): string {
+  const label = languageLabel(lang);
+  return (
+    `You are a helpful assistant. Always respond in ${label}. ` +
+    'Answer questions clearly and concisely based on the provided web page content. ' +
+    'If the user asks about something not covered in the page content, answer from your general knowledge but clarify that.'
+  );
+}
+
+/**
+ * 後方互換のために旧定数を維持（既存コードからの参照を壊さないため）
+ * @deprecated getExplainSystemPrompt() / getChatSystemPromptBase() を使うこと
+ */
+export const EXPLAIN_SYSTEM_PROMPT = getExplainSystemPrompt('en');
+export const CHAT_SYSTEM_PROMPT_BASE = getChatSystemPromptBase('en');
 
 /**
  * HTTPエラーをステータスコード別に区別可能なメッセージに変換する（F-011）
