@@ -6,19 +6,24 @@ import { installChromeMock, uninstallChromeMock, type ChromeMock } from './helpe
 
 let mock: ChromeMock;
 
-/** Chat タブに必要な DOM 要素をセットアップ */
+/** Chat 画面に必要な DOM 要素をセットアップ（F-401: 単一 Chat 画面） */
 function setupDom(): void {
   document.body.innerHTML = `
     <div id="chatMessages"></div>
-    <div id="chatLoading" class="hidden"></div>
-    <div id="chatError" class="hidden"></div>
+    <div id="shortContentWarning" class="hidden" role="alert">
+      <p id="shortContentWarningText"></p>
+      <div>
+        <button id="btnRunAnyway">Run anyway</button>
+        <button id="btnCancelShort">Cancel</button>
+      </div>
+    </div>
     <textarea id="chatInput"></textarea>
     <button id="btnChatSend">Send</button>
     <button id="btnChatClear">Clear</button>
   `;
 }
 
-/** Explain タブにも必要な DOM を追加するヘルパー（sidepanel/index.ts 経由のテスト用） */
+/** sidepanel/index.ts 経由のテスト用フル DOM（単一 Chat 画面, F-401） */
 function setupFullDom(): void {
   document.body.innerHTML = `
     <span id="currentUrl">Loading...</span>
@@ -26,24 +31,28 @@ function setupFullDom(): void {
     <div id="apiKeyWarning" class="hidden">
       <button id="linkToOptions"></button>
     </div>
+    <select id="outputLanguageSelect">
+      <option value="en">EN</option>
+      <option value="ja">JA</option>
+    </select>
     <div id="mainContent" class="hidden">
-      <button id="tabBtnExplain" class="tab-btn active" role="tab" aria-selected="true"></button>
-      <button id="tabBtnChat" class="tab-btn" role="tab" aria-selected="false"></button>
-      <div id="tabExplain" class="tab-panel"></div>
-      <div id="tabChat" class="tab-panel hidden">
-        <div id="chatMessages"></div>
-        <div id="chatLoading" class="hidden"></div>
-        <div id="chatError" class="hidden"></div>
-        <textarea id="chatInput"></textarea>
-        <button id="btnChatSend">Send</button>
-        <button id="btnChatClear">Clear</button>
+      <div id="chatMessages"></div>
+      <div id="shortContentWarning" class="hidden" role="alert">
+        <p id="shortContentWarningText"></p>
+        <div>
+          <button id="btnRunAnyway">Run anyway</button>
+          <button id="btnCancelShort">Cancel</button>
+        </div>
       </div>
-      <button id="btnExplainWhole">Explain whole page</button>
-      <button id="btnExplainSelection">Selection only</button>
-      <div id="explainLoading" class="hidden"></div>
-      <div id="truncatedNotice" class="hidden"></div>
-      <div id="explainError" class="hidden"></div>
-      <div id="explainResult" class="hidden"></div>
+      <button id="qaExplainPage">Explain page</button>
+      <button id="qaExplainSelection">Explain selection</button>
+      <button id="qaSummary">Summary</button>
+      <button id="qaDetailed">Detailed</button>
+      <button id="qaBeginner">Beginner-friendly</button>
+      <button id="qaExpert">Expert-level</button>
+      <textarea id="chatInput"></textarea>
+      <button id="btnChatSend">Send</button>
+      <button id="btnChatClear">Clear</button>
     </div>
   `;
 }
@@ -109,7 +118,7 @@ describe('Chat 1 ターン目（F-006）', () => {
     expect(messages.textContent).toContain('AI response to first message.');
   });
 
-  it('ページ本文が CHAT メッセージの pageContent フィールドに含まれる（F-006）', async () => {
+  it('ページ本文が CHAT メッセージの userMessage に埋め込まれる（F-403: 最新メッセージにのみコンテキスト付与）', async () => {
     setupTabsSendMessage({ content: 'This is the article content.', truncated: false, originalLength: 28 });
     mock.runtime.sendMessage = vi.fn(() =>
       Promise.resolve({ text: 'Answer.' })
@@ -123,11 +132,12 @@ describe('Chat 1 ターン目（F-006）', () => {
     await flush(20);
 
     // runtime.sendMessage に渡した CHAT メッセージを検証
+    // Sprint 7 以降: pageContent は userMessage に埋め込まれる（F-403）
     const chatCall = mock.runtime.sendMessage.mock.calls[0];
-    const chatMsg = chatCall[0] as { type: string; pageContent: string; userMessage: string };
+    const chatMsg = chatCall[0] as { type: string; userMessage: string };
     expect(chatMsg.type).toBe('CHAT');
-    expect(chatMsg.pageContent).toBe('This is the article content.');
-    expect(chatMsg.userMessage).toBe('Summarize');
+    expect(chatMsg.userMessage).toContain('Summarize');
+    expect(chatMsg.userMessage).toContain('This is the article content.');
   });
 });
 
@@ -169,8 +179,9 @@ describe('Chat 2 ターン以上の対話（F-006）', () => {
     };
 
     expect(secondMsg.type).toBe('CHAT');
-    expect(secondMsg.userMessage).toBe('Turn 2 question');
-    // history に 1 ターン目の user/assistant が含まれる
+    // userMessage はページ本文が埋め込まれているため、先頭部分が元のテキストと一致する（F-403）
+    expect(secondMsg.userMessage).toContain('Turn 2 question');
+    // history に 1 ターン目の user/assistant が含まれる（履歴はプロンプト本文のみ）
     expect(secondMsg.history).toHaveLength(2);
     expect(secondMsg.history[0]).toEqual({ role: 'user', content: 'Turn 1 question' });
     expect(secondMsg.history[1]).toEqual({ role: 'assistant', content: 'First AI answer.' });
@@ -229,9 +240,9 @@ describe('Chat 履歴クリア（F-006）', () => {
     // 履歴がゼロになることを確認
     expect(getChatHistory().length).toBe(0);
 
-    // 画面からもメッセージが消える
+    // 画面は Welcome メッセージのみが残る（F-401: リセット後に Welcome 再表示）
     const messages = document.getElementById('chatMessages')!;
-    expect(messages.textContent).toBe('');
+    expect(messages.textContent).toContain('Welcome');
   });
 
   it('resetChat() を直接呼ぶと履歴がクリアされる（F-006, F-008）', async () => {
@@ -251,7 +262,8 @@ describe('Chat 履歴クリア（F-006）', () => {
     resetChat();
 
     expect(getChatHistory().length).toBe(0);
-    expect(document.getElementById('chatMessages')!.textContent).toBe('');
+    // Welcome メッセージが再表示される（F-401）
+    expect(document.getElementById('chatMessages')!.textContent).toContain('Welcome');
   });
 });
 
@@ -309,7 +321,7 @@ describe('二重送信防止（F-006）', () => {
 // エラーハンドリング（F-011）
 // ----------------------------------------------------------------
 describe('Chat エラーハンドリング（F-011）', () => {
-  it('API エラー時にエラーメッセージが表示される', async () => {
+  it('API エラー時にエラーメッセージが chatMessages に表示される', async () => {
     setupTabsSendMessage({ content: 'Page.', truncated: false, originalLength: 5 });
     mock.runtime.sendMessage = vi.fn(() =>
       Promise.resolve({ error: 'Authentication error (401): Invalid API key.' })
@@ -322,9 +334,9 @@ describe('Chat エラーハンドリング（F-011）', () => {
     (document.getElementById('btnChatSend') as HTMLButtonElement).click();
     await flush(20);
 
-    const error = document.getElementById('chatError')!;
-    expect(error.classList.contains('hidden')).toBe(false);
-    expect(error.textContent).toContain('Authentication error');
+    // エラーは chatMessages 内の error バブルとして表示される（F-401/F-011）
+    const messages = document.getElementById('chatMessages')!;
+    expect(messages.textContent).toContain('Authentication error');
   });
 
   it('エラーメッセージに API キーが含まれない（F-011）', async () => {
@@ -340,8 +352,8 @@ describe('Chat エラーハンドリング（F-011）', () => {
     (document.getElementById('btnChatSend') as HTMLButtonElement).click();
     await flush(20);
 
-    const error = document.getElementById('chatError')!;
-    expect(error.textContent).not.toContain('sk-ant-leaktest-123');
+    const messages = document.getElementById('chatMessages')!;
+    expect(messages.textContent).not.toContain('sk-ant-leaktest-123');
   });
 
   it('console.error に API キーが出力されない（F-011: ログ経路での漏洩防止）', async () => {
@@ -465,7 +477,8 @@ describe('Enter キー送信（F-006）', () => {
     const callArgs = mock.runtime.sendMessage.mock.calls[0];
     const msg = callArgs[0] as { type: string; userMessage: string };
     expect(msg.type).toBe('CHAT');
-    expect(msg.userMessage).toBe('Enter key test');
+    // userMessage にはページ本文が埋め込まれているため、元のテキストが含まれることを確認（F-403）
+    expect(msg.userMessage).toContain('Enter key test');
   });
 
   it('Shift+Enter では送信されない（改行扱い）', async () => {

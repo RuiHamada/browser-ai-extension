@@ -1,9 +1,8 @@
-// サイドパネルのエントリポイント（F-009, F-010, F-005, F-007, F-201）
+// サイドパネルのエントリポイント（F-009, F-010, F-201, F-401）
+// Sprint 7: タブ UI を撤廃し、単一 Chat 画面として初期化する
 
 import { hasApiKey, validateOutputLanguage } from '../lib/storage.js';
 import type { BroadcastMessage, OutputLanguage } from '../types/messages.js';
-import { DEFAULT_SETTINGS } from '../types/messages.js';
-import { initExplain, resetExplain } from './explain.js';
 import { initChat, resetChat } from './chat.js';
 
 const $e = (id: string): HTMLElement => document.getElementById(id)!;
@@ -43,48 +42,6 @@ async function checkAndShowApiKeyWarning(): Promise<void> {
   }
 }
 
-// タブ切り替えロジック（F-007）
-function initTabs(): void {
-  const btnExplain = document.getElementById('tabBtnExplain') as HTMLButtonElement | null;
-  const btnChat = document.getElementById('tabBtnChat') as HTMLButtonElement | null;
-  const panelExplain = document.getElementById('tabExplain');
-  const panelChat = document.getElementById('tabChat');
-
-  // タブ要素が存在しない場合（テスト環境など）はスキップ
-  if (!btnExplain || !btnChat || !panelExplain || !panelChat) return;
-
-  // null チェック後の非 null 参照をクロージャに渡す
-  const btnExplainNN = btnExplain;
-  const btnChatNN = btnChat;
-  const panelExplainNN = panelExplain;
-  const panelChatNN = panelChat;
-
-  function switchTab(active: 'explain' | 'chat'): void {
-    const isExplain = active === 'explain';
-    btnExplainNN.classList.toggle('active', isExplain);
-    btnExplainNN.setAttribute('aria-selected', String(isExplain));
-    btnChatNN.classList.toggle('active', !isExplain);
-    btnChatNN.setAttribute('aria-selected', String(!isExplain));
-    panelExplainNN.classList.toggle('hidden', !isExplain);
-    panelChatNN.classList.toggle('hidden', isExplain);
-  }
-
-  btnExplainNN.addEventListener('click', () => switchTab('explain'));
-  btnChatNN.addEventListener('click', () => switchTab('chat'));
-
-  // キーボード操作対応（Tab/矢印キーで切り替え可能）
-  [btnExplainNN, btnChatNN].forEach((btn, idx, arr) => {
-    btn.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-        e.preventDefault();
-        const next = arr[(idx + (e.key === 'ArrowRight' ? 1 : -1) + arr.length) % arr.length];
-        next.focus();
-        next.click();
-      }
-    });
-  });
-}
-
 // 設定ページを開く
 $e('btnSettings').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
@@ -100,8 +57,7 @@ chrome.runtime.onMessage.addListener((message: BroadcastMessage, _sender, _sendR
     updateUrlDisplay(message.url);
     // タブが変わったら設定状態を再チェック
     void checkAndShowApiKeyWarning();
-    // URL 変化時に Explain・Chat の状態をリセット（F-008）
-    resetExplain();
+    // URL 変化時に Chat 履歴をリセット（F-008 / F-404）
     resetChat();
   }
   return undefined;
@@ -146,6 +102,4 @@ chrome.storage.onChanged.addListener((changes, area) => {
 void displayCurrentUrl();
 void checkAndShowApiKeyWarning();
 syncOutputLanguageFromStorage();
-initTabs();
-initExplain();
 initChat();

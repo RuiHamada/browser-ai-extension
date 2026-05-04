@@ -3,9 +3,8 @@
 
 import type { BackgroundMessage } from '../types/messages.js';
 import { saveSettings, loadSettings } from '../lib/storage.js';
-import { callClaudeAPI, getExplainSystemPrompt, getShortExplainSystemPrompt, getChatSystemPromptBase } from '../lib/claude.js';
+import { callClaudeAPI, getShortExplainSystemPrompt, getChatSystemPromptBase } from '../lib/claude.js';
 import { sanitizeErrorMessage, sanitizeErrorForLog } from '../lib/sanitize.js';
-import { SHORT_CONTENT_THRESHOLD, SELECTION_MAX_CHARS } from '../content/extract.js';
 
 // アイコンクリックでサイドパネルを開く設定
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -101,68 +100,22 @@ async function handleMessage(
       return { ok: true };
     }
 
-    case 'EXPLAIN': {
-      // Explain: ページ本文または選択テキストを Claude API に送り解説を返す（F-005, F-201, F-204, F-301, F-302）
-      // outputLanguage に応じてシステムプロンプトの言語指示を切り替える
-      const explainSettings = await loadSettings();
-      const explainLang = explainSettings.outputLanguage;
-      const explainPromptLang = explainLang === 'ja' ? 'Japanese' : 'English';
-
-      if (message.mode === 'selection') {
-        // 選択モード（F-301, F-302, F-303）:
-        // 選択テキスト長で短文判定（F-303: pageContent ではなく selectionText で判定）
-        const isShortSelection = message.selectionText.length < SHORT_CONTENT_THRESHOLD;
-        const selectionSystemPrompt = isShortSelection
-          ? getShortExplainSystemPrompt(explainLang)
-          : getExplainSystemPrompt(explainLang);
-
-        // 選択テキストを SELECTION_MAX_CHARS で切り詰め（F-302）
-        // '…' を含めた全体が SELECTION_MAX_CHARS 以内に収まるよう slice は -1 する
-        const truncatedSelection = message.selectionText.length > SELECTION_MAX_CHARS
-          ? message.selectionText.slice(0, SELECTION_MAX_CHARS - 1) + '…'
-          : message.selectionText;
-
-        let selectionPrompt: string;
-        if (message.pageContent.trim()) {
-          // ページ本文がある場合は文脈付きプロンプト（F-302）
-          selectionPrompt =
-            `Page context (for reference, do not summarize this):\n<page>\n${message.pageContent}\n</page>\n\n` +
-            `Explain the following selection within that context:\n<selection>\n${truncatedSelection}\n</selection>`;
-        } else {
-          // ページ本文が空の場合はフォールバック: 選択テキストのみで Explain（F-301）
-          selectionPrompt = `Please explain the following text in ${explainPromptLang}:\n\n${truncatedSelection}`;
-        }
-
-        const selectionResult = await callClaudeAPI({
-          prompt: selectionPrompt,
-          system: selectionSystemPrompt,
-        });
-        return { text: selectionResult.text };
-      }
-
-      // ページ全体モード（従来の挙動を維持、F-005, F-204）:
-      // 入力が短い場合は短文用プロンプトを使用する
-      const isShortContent = message.content.length < SHORT_CONTENT_THRESHOLD;
-      const systemPrompt = isShortContent
-        ? getShortExplainSystemPrompt(explainLang)
-        : getExplainSystemPrompt(explainLang);
-      const result = await callClaudeAPI({
-        prompt: `Please explain the following web page content in ${explainPromptLang}:\n\n${message.content}`,
-        system: systemPrompt,
-      });
-      return { text: result.text };
-    }
-
     case 'CHAT': {
-      // Chat: ページ本文をコンテキストに含めた会話（F-006, F-201）
+      // Chat: ページ本文をコンテキストに含めた会話（F-006, F-201, F-402, F-403）
       // outputLanguage に応じてシステムプロンプトの言語指示を切り替える
       const chatSettings = await loadSettings();
       const chatLang = chatSettings.outputLanguage;
-      const chatBase = getChatSystemPromptBase(chatLang);
-      // ページ本文をシステムプロンプトに埋め込む
+
+      // F-204: useShortPrompt フラグが立っている場合は短文 system プロンプトを使う
+      const systemPrompt = message.useShortPrompt
+        ? getShortExplainSystemPrompt(chatLang)
+        : getChatSystemPromptBase(chatLang);
+
+      // pageContent は後方互換用。Sprint 7 以降は userMessage にコンテキストが埋め込まれるため
+      // pageContent が空でないときのみシステムプロンプトに追加する（既存テストとの互換性維持）
       const systemWithContext = message.pageContent.trim()
-        ? `${chatBase}\n\nThe user is reading the following web page content:\n\n${message.pageContent}`
-        : chatBase;
+        ? `${systemPrompt}\n\nThe user is reading the following web page content:\n\n${message.pageContent}`
+        : systemPrompt;
 
       const chatResult = await callClaudeAPI({
         prompt: message.userMessage,
@@ -188,4 +141,3 @@ function maskApiKey(key: string): string {
   const suffix = key.substring(key.length - 4);
   return `${prefix}****...****-${suffix}`;
 }
-

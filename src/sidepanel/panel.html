@@ -15,6 +15,7 @@
     </div>
     <div class="header-actions">
       <!-- 出力言語クイック切替（F-201） -->
+      <label for="outputLanguageSelect" class="sr-only">Output language</label>
       <select id="outputLanguageSelect" title="Output language" aria-label="Output language">
         <option value="en">EN</option>
         <option value="ja">JA</option>
@@ -34,88 +35,48 @@
     <div class="warning-icon">&#x26A0;</div>
     <div class="warning-body">
       <strong>API key is not configured.</strong>
-      <p>Please set your Anthropic API key to use Explain and Chat features.</p>
+      <p>Please set your Anthropic API key to use AI features.</p>
       <button class="btn btn-primary" id="linkToOptions" type="button">Open Settings</button>
     </div>
   </div>
 
-  <!-- メインコンテンツ（APIキー設定済み時のみ表示） -->
+  <!-- メインコンテンツ（APIキー設定済み時のみ表示）（F-401: 単一 Chat 画面） -->
   <div id="mainContent" class="main-content hidden">
-    <!-- タブバー（F-007） -->
-    <div class="tab-bar" role="tablist">
-      <button class="tab-btn active" id="tabBtnExplain" role="tab" aria-selected="true" aria-controls="tabExplain">
-        Explain
-      </button>
-      <button class="tab-btn" id="tabBtnChat" role="tab" aria-selected="false" aria-controls="tabChat">
-        Chat
-      </button>
+    <!-- メッセージ領域: Welcome メッセージ + チャットバブル（F-401） -->
+    <div class="chat-messages" id="chatMessages" aria-live="polite" aria-label="Chat history"></div>
+
+    <!-- 短文警告ブロック（F-203 / F-402: "Explain page" クイックアクション時のみ） -->
+    <div class="short-content-warning hidden" id="shortContentWarning" role="alert">
+      <p class="warning-text" id="shortContentWarningText"></p>
+      <div class="warning-actions">
+        <button class="btn btn-primary" id="btnRunAnyway" type="button">Run anyway</button>
+        <button class="btn btn-secondary" id="btnCancelShort" type="button">Cancel</button>
+      </div>
     </div>
 
-    <!-- Explain タブ（F-005） -->
-    <div class="tab-panel" id="tabExplain" role="tabpanel" aria-labelledby="tabBtnExplain">
-      <!-- 実行ボタン（F-004: 全体/選択切り替え） -->
-      <div class="explain-actions">
-        <button class="btn btn-primary" id="btnExplainWhole" type="button">
-          Explain whole page
-        </button>
-        <button class="btn btn-secondary" id="btnExplainSelection" type="button">
-          Selection only
-        </button>
-      </div>
-
-      <!-- ローディング表示 -->
-      <div class="loading hidden" id="explainLoading" aria-live="polite">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        <span>Generating explanation...</span>
-      </div>
-
-      <!-- 短文警告ブロック（F-203） -->
-      <div class="short-content-warning hidden" id="shortContentWarning" role="alert">
-        <p class="warning-text" id="shortContentWarningText"></p>
-        <div class="warning-actions">
-          <button class="btn btn-primary" id="btnRunAnyway" type="button">Run anyway</button>
-          <button class="btn btn-secondary" id="btnCancelShort" type="button">Cancel</button>
-        </div>
-      </div>
-
-      <!-- 切り詰め通知（F-012） -->
-      <div class="truncated-notice hidden" id="truncatedNotice" aria-live="polite"></div>
-
-      <!-- エラー表示（F-011） -->
-      <div class="error-msg hidden" id="explainError" role="alert"></div>
-
-      <!-- 解説結果（F-005） -->
-      <div class="explain-result hidden" id="explainResult" aria-live="polite"></div>
+    <!-- クイックアクション行（F-402: 6 個のプリセットボタン） -->
+    <div class="quick-actions" id="quickActions" aria-label="Quick actions">
+      <button class="btn btn-quick" id="qaExplainPage" type="button">Explain page</button>
+      <button class="btn btn-quick" id="qaExplainSelection" type="button">Explain selection</button>
+      <button class="btn btn-quick" id="qaSummary" type="button">Summary</button>
+      <button class="btn btn-quick" id="qaDetailed" type="button">Detailed</button>
+      <button class="btn btn-quick" id="qaBeginner" type="button">Beginner-friendly</button>
+      <button class="btn btn-quick" id="qaExpert" type="button">Expert-level</button>
     </div>
 
-    <!-- Chat タブ（F-006） -->
-    <div class="tab-panel hidden" id="tabChat" role="tabpanel" aria-labelledby="tabBtnChat">
-      <!-- 会話履歴表示エリア -->
-      <div class="chat-messages" id="chatMessages" aria-live="polite" aria-label="Chat history"></div>
-
-      <!-- ローディング表示 -->
-      <div class="loading hidden" id="chatLoading" aria-live="polite">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        <span>Waiting for response...</span>
-      </div>
-
-      <!-- エラー表示（F-011） -->
-      <div class="error-msg hidden" id="chatError" role="alert"></div>
-
-      <!-- 入力エリア -->
-      <div class="chat-input-area">
+    <!-- 入力バー（F-401: Clear / textarea / Send の順） -->
+    <div class="chat-input-area">
+      <div class="chat-input-row">
+        <button class="btn btn-secondary btn-clear" id="btnChatClear" type="button">Clear</button>
         <label for="chatInput" class="sr-only">Message</label>
         <textarea
           id="chatInput"
           class="chat-input"
-          placeholder="Ask a question about this page... (Enter to send, Shift+Enter for newline)"
-          rows="3"
+          placeholder="Ask a follow-up question... (Enter to send, Shift+Enter for newline)"
+          rows="2"
           aria-label="Chat message input"
         ></textarea>
-        <div class="chat-actions">
-          <button class="btn btn-primary" id="btnChatSend" type="button">Send</button>
-          <button class="btn btn-secondary" id="btnChatClear" type="button">Clear</button>
-        </div>
+        <button class="btn btn-primary btn-send" id="btnChatSend" type="button">Send</button>
       </div>
     </div>
   </div>

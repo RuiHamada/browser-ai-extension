@@ -130,9 +130,10 @@ describe('getChatSystemPromptBase', () => {
 });
 
 // ----------------------------------------------------------------
-// background: EXPLAIN / CHAT ハンドラが outputLanguage を system に埋め込む
+// background: CHAT ハンドラが outputLanguage を system に埋め込む（F-201 / Sprint 7）
+// Sprint 7 で EXPLAIN ハンドラを廃止。CHAT ハンドラで言語切替を検証する。
 // ----------------------------------------------------------------
-describe('background EXPLAIN ハンドラ: outputLanguage → system prompt', () => {
+describe('background CHAT ハンドラ: outputLanguage → system prompt（F-201 継続）', () => {
   const fetchMock = vi.fn();
 
   beforeEach(async () => {
@@ -160,17 +161,17 @@ describe('background EXPLAIN ハンドラ: outputLanguage → system prompt', ()
     });
   }
 
-  it('outputLanguage="en" のとき EXPLAIN system に "English" が含まれる', async () => {
+  it('outputLanguage="en" のとき CHAT system に "English" が含まれる', async () => {
     mock.storage.local._data['outputLanguage'] = 'en';
-    await callListener({ type: 'EXPLAIN', content: 'test content' });
+    await callListener({ type: 'CHAT', userMessage: 'test', history: [], pageContent: '' });
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { system: string };
     expect(body.system).toContain('English');
     expect(body.system).not.toContain('Japanese');
   });
 
-  it('outputLanguage="ja" のとき EXPLAIN system に "Japanese" が含まれる', async () => {
+  it('outputLanguage="ja" のとき CHAT system に "Japanese" が含まれる', async () => {
     mock.storage.local._data['outputLanguage'] = 'ja';
-    await callListener({ type: 'EXPLAIN', content: 'test content' });
+    await callListener({ type: 'CHAT', userMessage: 'test', history: [], pageContent: '' });
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { system: string };
     expect(body.system).toContain('Japanese');
     expect(body.system).not.toContain('English');

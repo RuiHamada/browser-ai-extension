@@ -39,21 +39,23 @@ export type BackgroundMessage =
   | { type: 'OPEN_SIDE_PANEL' }
   | { type: 'GET_SETTINGS' }
   | { type: 'SAVE_SETTINGS'; settings: Partial<Settings> }
-  /** ページ全体モード: content のみ送信（F-005 既存） */
-  | { type: 'EXPLAIN'; mode: 'whole'; content: string }
-  /**
-   * 選択モード: 選択テキストとページ本文を両方送信（F-301）
-   * pageContent が空のときはフォールバック（選択テキストのみで Explain）
-   */
-  | { type: 'EXPLAIN'; mode: 'selection'; selectionText: string; pageContent: string }
   | {
       type: 'CHAT';
-      /** 最新のユーザー入力 */
+      /** 最新のユーザー入力（クイックアクション・自由入力とも、コンテキスト埋め込み済み） */
       userMessage: string;
       /** 会話履歴（最新メッセージを含まない） */
       history: ChatMessage[];
-      /** ページ本文（システムコンテキストとして使用） */
+      /**
+       * ページ本文（後方互換で残す）。
+       * Sprint 7 以降は userMessage にコンテキストを埋め込む方式を採用するため通常は空文字。
+       * background 側では pageContent が空のときは userMessage をそのまま使う。
+       */
       pageContent: string;
+      /**
+       * F-204: 選択テキストが短い場合（< 40 文字）に短文 system プロンプトを使うフラグ。
+       * undefined / false のときは通常プロンプト。
+       */
+      useShortPrompt?: boolean;
     }
   ;
 

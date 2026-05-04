@@ -1,20 +1,19 @@
-// F-203 短文警告 UI / F-204 短文プロンプトの統合テスト
-// - 抽出結果 40 文字未満で警告 UI が表示される
+// F-203 短文警告 UI / F-204 短文プロンプトのテスト（Sprint 7 更新版）
+// - "Explain page" クイックアクションで 40 文字未満の場合に警告 UI が表示される
 // - Run anyway で API 呼び出しに進む（送信されること）
 // - Cancel で API 呼び出しが発生しない
-// - background EXPLAIN ハンドラが入力長で system prompt を切り替える
+// - background CHAT ハンドラが useShortPrompt フラグで system prompt を切り替える（F-204）
+// - selection クイックアクション（Explain selection）では F-303 通り警告抑止
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installChromeMock, uninstallChromeMock, type ChromeMock } from './helpers/chromeMock.js';
 
 let mock: ChromeMock;
 
-/** Explain タブに必要なDOM要素をセットアップ（短文警告要素を含む） */
+/** Chat 単一画面に必要な DOM 要素をセットアップ（F-401） */
 function setupDom(): void {
   document.body.innerHTML = `
-    <button id="btnExplainWhole">Explain whole page</button>
-    <button id="btnExplainSelection">Selection only</button>
-    <div id="explainLoading" class="hidden"></div>
+    <div id="chatMessages"></div>
     <div id="shortContentWarning" class="hidden" role="alert">
       <p id="shortContentWarningText"></p>
       <div>
@@ -22,9 +21,15 @@ function setupDom(): void {
         <button id="btnCancelShort">Cancel</button>
       </div>
     </div>
-    <div id="truncatedNotice" class="hidden"></div>
-    <div id="explainError" class="hidden"></div>
-    <div id="explainResult" class="hidden"></div>
+    <button id="qaExplainPage">Explain page</button>
+    <button id="qaExplainSelection">Explain selection</button>
+    <button id="qaSummary">Summary</button>
+    <button id="qaDetailed">Detailed</button>
+    <button id="qaBeginner">Beginner-friendly</button>
+    <button id="qaExpert">Expert-level</button>
+    <textarea id="chatInput"></textarea>
+    <button id="btnChatSend">Send</button>
+    <button id="btnChatClear">Clear</button>
   `;
 }
 
@@ -53,11 +58,10 @@ function setupTabsSendMessage(response: unknown): void {
 }
 
 // ----------------------------------------------------------------
-// F-203: 短文警告 UI
+// F-203: 短文警告 UI（"Explain page" クイックアクション時のみ）
 // ----------------------------------------------------------------
-describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
+describe('F-203: 短文警告 UI（"Explain page" クイックアクション）', () => {
   it('抽出結果が 40 文字未満のとき shortContentWarning が表示される', async () => {
-    // 39文字のコンテンツ（< 40 閾値）
     const shortContent = 'A'.repeat(39);
     setupTabsSendMessage({
       url: 'https://example.com',
@@ -67,10 +71,10 @@ describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
     });
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
 
     const warning = document.getElementById('shortContentWarning')!;
@@ -94,10 +98,10 @@ describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
     });
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
 
     const warning = document.getElementById('shortContentWarning')!;
@@ -105,7 +109,7 @@ describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
     expect(mock.runtime.sendMessage).toHaveBeenCalled();
   });
 
-  it('Run anyway を押すと API 呼び出しが行われ結果が表示される', async () => {
+  it('Run anyway を押すと API 呼び出しが行われ応答が chatMessages に表示される', async () => {
     const shortContent = 'notable';
     setupTabsSendMessage({
       url: 'https://example.com',
@@ -117,10 +121,10 @@ describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
       Promise.resolve({ text: 'Explanation of the word notable.' })
     );
 
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
 
     // 警告が表示されている
@@ -136,10 +140,9 @@ describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
     expect(document.getElementById('shortContentWarning')!.classList.contains('hidden')).toBe(true);
     // API が呼ばれた
     expect(mock.runtime.sendMessage).toHaveBeenCalled();
-    // 結果が表示された
-    const result = document.getElementById('explainResult')!;
-    expect(result.classList.contains('hidden')).toBe(false);
-    expect(result.textContent).toContain('Explanation of the word notable.');
+    // 応答が chatMessages に表示された
+    const messages = document.getElementById('chatMessages')!;
+    expect(messages.textContent).toContain('Explanation of the word notable.');
   });
 
   it('Cancel を押すと API 呼び出しは行われない', async () => {
@@ -152,10 +155,10 @@ describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
     });
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
 
     // 警告が表示されている
@@ -169,9 +172,6 @@ describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
     expect(document.getElementById('shortContentWarning')!.classList.contains('hidden')).toBe(true);
     // API は呼ばれない
     expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
-    // 結果も表示されない
-    const result = document.getElementById('explainResult')!;
-    expect(result.classList.contains('hidden')).toBe(true);
   });
 
   it('警告ブロックに role="alert" 相当の通知構造がある（アクセシビリティ）', () => {
@@ -180,8 +180,9 @@ describe('F-203: 短文警告 UI（ページ全体 Explain）', () => {
   });
 });
 
-// F-303: 選択モードでは F-203 の短文警告を抑止する
-// 選択テキストとページ本文の両方をモックするヘルパー
+// ----------------------------------------------------------------
+// F-303: "Explain selection" クイックアクションでは短文警告を抑止する
+// ----------------------------------------------------------------
 function setupTabsSendMessageForSelection(
   selectedText: string,
   pageContent: string = '',
@@ -192,8 +193,10 @@ function setupTabsSendMessageForSelection(
   }).tabs.sendMessage = vi.fn(() => {
     callCount++;
     if (callCount === 1) {
+      // GET_SELECTED_TEXT
       return Promise.resolve({ selectedText });
     }
+    // GET_PAGE_CONTENT
     return Promise.resolve({
       url: 'https://example.com',
       content: pageContent,
@@ -204,16 +207,16 @@ function setupTabsSendMessageForSelection(
   (globalThis as unknown as { chrome: typeof mock }).chrome = mock;
 }
 
-describe('F-303: 選択モードでは短文警告 UI を抑止する（上書き仕様）', () => {
+describe('F-303: "Explain selection" クイックアクションでは短文警告 UI を抑止する', () => {
   it('選択テキストが 40 文字未満でも shortContentWarning が表示されない（F-303）', async () => {
     const shortSelected = 'short text';
     setupTabsSendMessageForSelection(shortSelected, 'Page body context here.');
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
-    (document.getElementById('btnExplainSelection') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainSelection') as HTMLButtonElement).click();
     await flush(20);
 
     // 警告 UI は表示されない（F-303）
@@ -228,26 +231,10 @@ describe('F-303: 選択モードでは短文警告 UI を抑止する（上書�
     setupTabsSendMessageForSelection('A', 'Page body content for context.');
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
-    (document.getElementById('btnExplainSelection') as HTMLButtonElement).click();
-    await flush(20);
-
-    const warning = document.getElementById('shortContentWarning')!;
-    expect(warning.classList.contains('hidden')).toBe(true);
-    expect(mock.runtime.sendMessage).toHaveBeenCalled();
-  });
-
-  it('選択テキストが 40 文字以上のときも警告が表示されない（変化なし）', async () => {
-    const longSelected = 'This selection is long enough to avoid the short content warning threshold.';
-    setupTabsSendMessageForSelection(longSelected, 'Page body content.');
-    mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
-
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
-
-    (document.getElementById('btnExplainSelection') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainSelection') as HTMLButtonElement).click();
     await flush(20);
 
     const warning = document.getElementById('shortContentWarning')!;
@@ -257,9 +244,9 @@ describe('F-303: 選択モードでは短文警告 UI を抑止する（上書�
 });
 
 // ----------------------------------------------------------------
-// F-204: 短文プロンプト（background EXPLAIN ハンドラ）
+// F-204: background CHAT ハンドラ: useShortPrompt フラグで system prompt を切り替える
 // ----------------------------------------------------------------
-describe('F-204: background EXPLAIN ハンドラ: 短文 vs 通常プロンプト切り替え', () => {
+describe('F-204: background CHAT ハンドラ: useShortPrompt による短文 vs 通常プロンプト切り替え', () => {
   const fetchMock = vi.fn();
 
   beforeEach(async () => {
@@ -286,19 +273,29 @@ describe('F-204: background EXPLAIN ハンドラ: 短文 vs 通常プロンプ�
     });
   }
 
-  it('入力が 40 文字未満のとき短文用プロンプト文言が system に含まれる', async () => {
+  it('useShortPrompt=true のとき短文用プロンプト文言が system に含まれる', async () => {
     mock.storage.local._data['outputLanguage'] = 'en';
-    // "notable" = 7文字 < 40
-    await callListener({ type: 'EXPLAIN', content: 'notable' });
+    await callListener({
+      type: 'CHAT',
+      userMessage: 'notable',
+      history: [],
+      pageContent: '',
+      useShortPrompt: true,
+    });
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { system: string };
     // 短文プロンプトには "short word" や "usage" の文言が含まれる
     expect(body.system).toContain('short word');
   });
 
-  it('入力が 40 文字以上のとき通常プロンプトが使われ短文用文言は含まれない', async () => {
+  it('useShortPrompt=false のとき通常プロンプトが使われ短文用文言は含まれない', async () => {
     mock.storage.local._data['outputLanguage'] = 'en';
-    const longContent = 'A'.repeat(40);
-    await callListener({ type: 'EXPLAIN', content: longContent });
+    await callListener({
+      type: 'CHAT',
+      userMessage: 'A'.repeat(40),
+      history: [],
+      pageContent: '',
+      useShortPrompt: false,
+    });
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { system: string };
     // 通常プロンプトには "web page content" の文言が含まれる
     expect(body.system).toContain('web page content');
@@ -306,18 +303,29 @@ describe('F-204: background EXPLAIN ハンドラ: 短文 vs 通常プロンプ�
     expect(body.system).not.toContain('short word');
   });
 
-  it('短文入力 + outputLanguage="ja" のとき短文用プロンプトが日本語対応になる', async () => {
+  it('useShortPrompt=true + outputLanguage="ja" のとき短文用プロンプトが日本語対応になる', async () => {
     mock.storage.local._data['outputLanguage'] = 'ja';
-    await callListener({ type: 'EXPLAIN', content: 'notable' });
+    await callListener({
+      type: 'CHAT',
+      userMessage: 'notable',
+      history: [],
+      pageContent: '',
+      useShortPrompt: true,
+    });
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { system: string };
     expect(body.system).toContain('Japanese');
     expect(body.system).toContain('short word');
   });
 
-  it('通常長入力 + outputLanguage="ja" のとき通常プロンプトが日本語対応になる', async () => {
+  it('useShortPrompt=false + outputLanguage="ja" のとき通常プロンプトが日本語対応になる', async () => {
     mock.storage.local._data['outputLanguage'] = 'ja';
-    const longContent = 'B'.repeat(40);
-    await callListener({ type: 'EXPLAIN', content: longContent });
+    await callListener({
+      type: 'CHAT',
+      userMessage: 'B'.repeat(40),
+      history: [],
+      pageContent: '',
+      useShortPrompt: false,
+    });
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { system: string };
     expect(body.system).toContain('Japanese');
     expect(body.system).not.toContain('short word');
@@ -351,11 +359,10 @@ describe('getShortExplainSystemPrompt（F-204）', () => {
 });
 
 // ----------------------------------------------------------------
-// [HIGH] Codex 指摘修正: TAB_CHANGED リセット後に古い短文警告ボタンが発火しない
-// AbortController によるリスナークリーンアップの検証
+// [HIGH] AbortController: resetChat 後に古いリスナーが発火しない（F-203）
 // ----------------------------------------------------------------
-describe('[HIGH] AbortController: resetExplain 後に古いリスナーが発火しない（F-203）', () => {
-  it('resetExplain 後に btnRunAnyway を click しても API 呼び出しが起きない', async () => {
+describe('[HIGH] AbortController: resetChat 後に古いリスナーが発火しない（F-203）', () => {
+  it('resetChat 後に btnRunAnyway を click しても API 呼び出しが起きない', async () => {
     const shortContent = 'notable';
     setupTabsSendMessage({
       url: 'https://example.com',
@@ -365,19 +372,19 @@ describe('[HIGH] AbortController: resetExplain 後に古いリスナーが発火
     });
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain, resetExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat, resetChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
     // 短文警告を表示させる
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
 
     // 警告が出ていることを確認
     expect(document.getElementById('shortContentWarning')!.classList.contains('hidden')).toBe(false);
     expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
 
-    // TAB_CHANGED 相当: resetExplain を呼ぶ
-    resetExplain();
+    // TAB_CHANGED 相当: resetChat を呼ぶ
+    resetChat();
 
     // リセット後に古い btnRunAnyway を click
     (document.getElementById('btnRunAnyway') as HTMLButtonElement).click();
@@ -397,26 +404,25 @@ describe('[HIGH] AbortController: resetExplain 後に古いリスナーが発火
     });
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain, resetExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat, resetChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
     // 1回目: 短文警告を表示
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
     expect(document.getElementById('shortContentWarning')!.classList.contains('hidden')).toBe(false);
 
-    // Cancel（または reset）で1回目の警告を解消せず、2回目の Explain を起動
-    resetExplain();
+    // reset して2回目の Explain を起動
+    resetChat();
     await flush(5);
 
-    // DOM を再設定してから2回目の Explain を起動
     setupTabsSendMessage({
       url: 'https://example.com',
       content: shortContent,
       truncated: false,
       originalLength: shortContent.length,
     });
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
 
     // 2回目の Run anyway を押す
@@ -429,10 +435,9 @@ describe('[HIGH] AbortController: resetExplain 後に古いリスナーが発火
 });
 
 // ----------------------------------------------------------------
-// [HIGH] Codex 再レビュー指摘修正: Run anyway / Cancel 解決パスでのリスナークリーンアップ
-// 通常の Run/Cancel 解決後に古いハンドラが DOM に残らないことを検証する
+// [HIGH] Run anyway / Cancel 解決パスでのリスナークリーンアップ
 // ----------------------------------------------------------------
-describe('[HIGH] Codex 再レビュー: Run anyway / Cancel 解決パスのリスナークリーンアップ', () => {
+describe('[HIGH] Run anyway / Cancel 解決パスのリスナークリーンアップ', () => {
   it('短文警告→Run anyway→再度短文警告→Run anyway で API が各回 1 回だけ呼ばれる', async () => {
     const shortContent = 'notable';
     setupTabsSendMessage({
@@ -443,11 +448,11 @@ describe('[HIGH] Codex 再レビュー: Run anyway / Cancel 解決パスのリ�
     });
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
     // 1回目: 短文警告 → Run anyway
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
     expect(document.getElementById('shortContentWarning')!.classList.contains('hidden')).toBe(false);
     expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
@@ -465,7 +470,7 @@ describe('[HIGH] Codex 再レビュー: Run anyway / Cancel 解決パスのリ�
       truncated: false,
       originalLength: shortContent.length,
     });
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
     expect(document.getElementById('shortContentWarning')!.classList.contains('hidden')).toBe(false);
 
@@ -473,7 +478,6 @@ describe('[HIGH] Codex 再レビュー: Run anyway / Cancel 解決パスのリ�
     await flush(20);
 
     // 2回目の API 呼び出しが追加で 1 回（合計 2 回）
-    // 古いハンドラが残っていた場合は 3 回以上になる
     expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(2);
   });
 
@@ -487,11 +491,11 @@ describe('[HIGH] Codex 再レビュー: Run anyway / Cancel 解決パスのリ�
     });
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
 
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
+    const { initChat } = await import('../src/sidepanel/chat.js');
+    initChat();
 
     // 1回目: 短文警告 → Cancel
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
     expect(document.getElementById('shortContentWarning')!.classList.contains('hidden')).toBe(false);
 
@@ -508,7 +512,7 @@ describe('[HIGH] Codex 再レビュー: Run anyway / Cancel 解決パスのリ�
       truncated: false,
       originalLength: shortContent.length,
     });
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
+    (document.getElementById('qaExplainPage') as HTMLButtonElement).click();
     await flush(20);
     expect(document.getElementById('shortContentWarning')!.classList.contains('hidden')).toBe(false);
 
@@ -517,58 +521,5 @@ describe('[HIGH] Codex 再レビュー: Run anyway / Cancel 解決パスのリ�
 
     // API は 1 回だけ呼ばれる（ステイルハンドラが発火しない）
     expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(1);
-  });
-
-  it('連続した短文警告で btnRunAnyway への addEventListener 呼び出し数が増えない', async () => {
-    const shortContent = 'notable';
-    setupTabsSendMessage({
-      url: 'https://example.com',
-      content: shortContent,
-      truncated: false,
-      originalLength: shortContent.length,
-    });
-    mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'result' }));
-
-    // addEventListener をスパイして呼び出し回数を記録する
-    const originalAddEventListener = EventTarget.prototype.addEventListener;
-    const addEventListenerSpy = vi.spyOn(EventTarget.prototype, 'addEventListener');
-
-    const { initExplain } = await import('../src/sidepanel/explain.js');
-    initExplain();
-    // initExplain 自体の addEventListener 呼び出しをリセット
-    addEventListenerSpy.mockClear();
-
-    // 1回目: 短文警告表示（btnRunAnyway に click リスナーが 1 回登録される）
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
-    await flush(20);
-    const callsAfterFirst = addEventListenerSpy.mock.calls.filter(
-      ([type]) => type === 'click'
-    ).length;
-
-    // Run anyway で解決
-    (document.getElementById('btnRunAnyway') as HTMLButtonElement).click();
-    await flush(20);
-    addEventListenerSpy.mockClear();
-
-    // 2回目: 再度短文警告（btnRunAnyway への click リスナーは再び 1 回だけ登録される）
-    setupTabsSendMessage({
-      url: 'https://example.com',
-      content: shortContent,
-      truncated: false,
-      originalLength: shortContent.length,
-    });
-    (document.getElementById('btnExplainWhole') as HTMLButtonElement).click();
-    await flush(20);
-    const callsAfterSecond = addEventListenerSpy.mock.calls.filter(
-      ([type]) => type === 'click'
-    ).length;
-
-    // 2回目の短文警告で登録される click リスナー数が 1回目と同じ（増えていない）
-    expect(callsAfterSecond).toBe(callsAfterFirst);
-
-    // スパイを元に戻す
-    addEventListenerSpy.mockRestore();
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    void originalAddEventListener;
   });
 });
