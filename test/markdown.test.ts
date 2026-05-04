@@ -332,6 +332,138 @@ describe('不正 URL スキームの拒否', () => {
 });
 
 // ----------------------------------------------------------------
+// テーブルレンダリング（F-504 拡張: GFM 風パイプテーブル）
+// ----------------------------------------------------------------
+
+describe('テーブルレンダリング', () => {
+  it('基本テーブル（ヘッダ + 区切り + 2 行）が table/thead/tbody/th/td で構造化される', () => {
+    const container = makeContainer();
+    renderMarkdown(container, '| Name | Age |\n|---|---|\n| Alice | 30 |\n| Bob | 25 |');
+    expect(container.querySelector('table.md-table')).not.toBeNull();
+    expect(container.querySelector('thead')).not.toBeNull();
+    expect(container.querySelector('tbody')).not.toBeNull();
+    const ths = container.querySelectorAll('thead th');
+    expect(ths.length).toBe(2);
+    expect(ths[0].textContent).toBe('Name');
+    expect(ths[1].textContent).toBe('Age');
+    const rows = container.querySelectorAll('tbody tr');
+    expect(rows.length).toBe(2);
+    expect(rows[0].querySelectorAll('td')[0].textContent).toBe('Alice');
+    expect(rows[0].querySelectorAll('td')[1].textContent).toBe('30');
+    expect(rows[1].querySelectorAll('td')[0].textContent).toBe('Bob');
+  });
+
+  it('セル内の bold / italic / code / link がインラインで反映される', () => {
+    const container = makeContainer();
+    renderMarkdown(
+      container,
+      '| A | B |\n|---|---|\n| **bold** | `code` |\n| *italic* | [link](https://example.com) |',
+    );
+    const tds = container.querySelectorAll('tbody td');
+    expect(tds[0].querySelector('strong')?.textContent).toBe('bold');
+    expect(tds[1].querySelector('code')?.textContent).toBe('code');
+    expect(tds[2].querySelector('em')?.textContent).toBe('italic');
+    const a = tds[3].querySelector('a');
+    expect(a?.textContent).toBe('link');
+    expect(a?.getAttribute('href')).toBe('https://example.com');
+  });
+
+  it(':--- が left、:---: が center、---: が right の text-align になる', () => {
+    const container = makeContainer();
+    renderMarkdown(container, '| L | C | R | N |\n|:---|:---:|---:|---|\n| a | b | c | d |');
+    const ths = container.querySelectorAll('thead th');
+    expect((ths[0] as HTMLElement).style.textAlign).toBe('left');
+    expect((ths[1] as HTMLElement).style.textAlign).toBe('center');
+    expect((ths[2] as HTMLElement).style.textAlign).toBe('right');
+    // none はスタイル未設定
+    expect((ths[3] as HTMLElement).style.textAlign).toBe('');
+    const tds = container.querySelectorAll('tbody td');
+    expect((tds[0] as HTMLElement).style.textAlign).toBe('left');
+    expect((tds[1] as HTMLElement).style.textAlign).toBe('center');
+    expect((tds[2] as HTMLElement).style.textAlign).toBe('right');
+    expect((tds[3] as HTMLElement).style.textAlign).toBe('');
+  });
+
+  it('列数が不揃い（ヘッダ 3 列、データ 2 列）の場合: 足りない td は空、余分は無視', () => {
+    const container = makeContainer();
+    renderMarkdown(container, '| A | B | C |\n|---|---|---|\n| x | y |');
+    const row = container.querySelector('tbody tr');
+    expect(row).not.toBeNull();
+    const tds = row!.querySelectorAll('td');
+    // ヘッダが 3 列なので td も 3 つ生成される
+    expect(tds.length).toBe(3);
+    expect(tds[0].textContent).toBe('x');
+    expect(tds[1].textContent).toBe('y');
+    expect(tds[2].textContent).toBe('');
+  });
+
+  it('表の前後に段落がある場合、段落と表が共存する', () => {
+    const container = makeContainer();
+    renderMarkdown(
+      container,
+      'Before\n\n| H1 | H2 |\n|---|---|\n| a | b |\n\nAfter',
+    );
+    const paras = container.querySelectorAll('p');
+    expect(paras.length).toBe(2);
+    expect(paras[0].textContent).toBe('Before');
+    expect(paras[1].textContent).toBe('After');
+    expect(container.querySelector('table')).not.toBeNull();
+  });
+
+  it('区切り行がない場合（ただのパイプ行）は段落として扱う（誤検出しない）', () => {
+    const container = makeContainer();
+    // 2 行目が区切り行パターンでない
+    renderMarkdown(container, '| a | b |\n| c | d |');
+    expect(container.querySelector('table')).toBeNull();
+    // 段落かテキストとして描画される
+    expect(container.textContent).toContain('a');
+    expect(container.textContent).toContain('b');
+  });
+
+  it('XSS: セルに <script> を入れても script 要素が生成されない', () => {
+    const container = makeContainer();
+    renderMarkdown(
+      container,
+      '| H |\n|---|\n| <script>alert(1)</script> |',
+    );
+    expect(container.querySelector('script')).toBeNull();
+    // テキストとして表示
+    expect(container.textContent).toContain('alert(1)');
+  });
+
+  it('XSS: セルに <img onerror> を入れても img/onerror 属性が生成されない', () => {
+    const container = makeContainer();
+    renderMarkdown(
+      container,
+      '| H |\n|---|\n| <img src=x onerror="alert(1)"> |',
+    );
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('[onerror]')).toBeNull();
+  });
+
+  it('XSS: セル内の javascript: リンクが無効化される', () => {
+    const container = makeContainer();
+    renderMarkdown(
+      container,
+      '| H |\n|---|\n| [click](javascript:alert(1)) |',
+    );
+    const links = container.querySelectorAll('a');
+    for (const link of Array.from(links)) {
+      expect((link.getAttribute('href') ?? '').toLowerCase()).not.toContain('javascript:');
+    }
+    expect(container.textContent).toContain('click');
+  });
+
+  it('テーブルが md-table-wrapper コンテナに包まれる（横スクロール対応）', () => {
+    const container = makeContainer();
+    renderMarkdown(container, '| X |\n|---|\n| 1 |');
+    const wrapper = container.querySelector('.md-table-wrapper');
+    expect(wrapper).not.toBeNull();
+    expect(wrapper!.querySelector('table.md-table')).not.toBeNull();
+  });
+});
+
+// ----------------------------------------------------------------
 // 複合テスト
 // ----------------------------------------------------------------
 

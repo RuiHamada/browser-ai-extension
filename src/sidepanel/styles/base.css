@@ -443,6 +443,41 @@ body {
   white-space: pre-wrap;
 }
 
+/* パイプテーブル（F-504 拡張: GFM 風テーブル） */
+.md-table-wrapper {
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.md-table th,
+.md-table td {
+  padding: 5px 10px;
+  border: 1px solid #3a3a3a;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.md-table thead th {
+  font-weight: 700;
+  background: #1e1e1e;
+  color: #e5e7eb;
+}
+
+.md-table tbody tr:nth-child(even) {
+  background: #161616;
+}
+
+.md-table tbody td {
+  color: #d1d5db;
+}
+
 /* スクリーンリーダー専用 */
 .sr-only {
   position: absolute;

@@ -152,7 +152,58 @@ interface BlankBlock {
   kind: 'blank';
 }
 
-type Block = CodeBlock | HeadingBlock | ListItem | ParagraphBlock | BlankBlock;
+/** 列アライメント */
+type ColAlign = 'left' | 'center' | 'right' | 'none';
+
+/** パイプテーブルを表す内部型（GFM 風） */
+interface TableBlock {
+  kind: 'table';
+  alignments: ColAlign[];
+  headers: string[];
+  rows: string[][];
+}
+
+type Block = CodeBlock | HeadingBlock | ListItem | ParagraphBlock | BlankBlock | TableBlock;
+
+// ----------------------------------------------------------------
+// テーブルパーサ ユーティリティ
+// ----------------------------------------------------------------
+
+/**
+ * パイプ区切り行をセル文字列配列に分解する。
+ * 前後の | は任意。各セルは trim する。
+ */
+function splitTableRow(line: string): string[] {
+  // 先頭・末尾の | を除去してから分割
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return trimmed.split('|').map((cell) => cell.trim());
+}
+
+/**
+ * 区切り行（|---|:---:|---:|）かどうかを判定し、列アライメントを返す。
+ * 区切り行でなければ null を返す。
+ */
+function parseSeparatorRow(line: string): ColAlign[] | null {
+  const cells = splitTableRow(line);
+  const alignments: ColAlign[] = [];
+  for (const cell of cells) {
+    if (!/^:?-+:?$/.test(cell)) return null;
+    const left = cell.startsWith(':');
+    const right = cell.endsWith(':');
+    if (left && right) alignments.push('center');
+    else if (right) alignments.push('right');
+    else if (left) alignments.push('left');
+    else alignments.push('none');
+  }
+  // 少なくとも 1 列必要
+  if (alignments.length === 0) return null;
+  return alignments;
+}
+
+/** パイプテーブルの行かどうか（| を含む行） */
+function isTableRow(line: string): boolean {
+  return line.includes('|');
+}
 
 /**
  * Markdown テキストをブロック列にパースする。
@@ -213,6 +264,35 @@ function parseBlocks(markdown: string): Block[] {
       blocks.push({ kind: 'blank' });
       i++;
       continue;
+    }
+
+    // パイプテーブル: ヘッダ行 + 区切り行 + 1行以上のデータ行
+    if (isTableRow(line) && i + 1 < lines.length) {
+      const separatorAlignments = parseSeparatorRow(lines[i + 1]);
+      if (separatorAlignments !== null && isTableRow(lines[i + 1])) {
+        const headers = splitTableRow(line);
+        const colCount = headers.length;
+        const rows: string[][] = [];
+        i += 2; // ヘッダ行と区切り行をスキップ
+        // データ行を連続して取り込む
+        while (i < lines.length && isTableRow(lines[i]) && lines[i].trim() !== '') {
+          const cells = splitTableRow(lines[i]);
+          // 列数を正規化：足りない列は空文字、多い列は切り捨て
+          const normalizedCells: string[] = [];
+          for (let ci = 0; ci < colCount; ci++) {
+            normalizedCells.push(cells[ci] ?? '');
+          }
+          rows.push(normalizedCells);
+          i++;
+        }
+        // データ行がゼロ行の場合は表として扱わず段落にフォールバック
+        if (rows.length > 0) {
+          blocks.push({ kind: 'table', alignments: separatorAlignments, headers, rows });
+          continue;
+        }
+        // フォールバック: i をヘッダ行に戻して段落として処理
+        i -= 2;
+      }
     }
 
     // 段落（連続行を結合）
@@ -286,6 +366,52 @@ function blocksToDOM(blocks: Block[], doc: Document): Node[] {
         i++;
       }
       nodes.push(listEl);
+      continue;
+    }
+
+    if (block.kind === 'table') {
+      // テーブル全体をスクロール可能なコンテナで包む
+      const wrapper = doc.createElement('div');
+      wrapper.classList.add('md-table-wrapper');
+
+      const table = doc.createElement('table');
+      table.classList.add('md-table');
+
+      // ヘッダ行
+      const thead = doc.createElement('thead');
+      const headerRow = doc.createElement('tr');
+      for (let ci = 0; ci < block.headers.length; ci++) {
+        const th = doc.createElement('th');
+        const align = block.alignments[ci] ?? 'none';
+        if (align !== 'none') th.style.textAlign = align;
+        for (const node of parseInline(block.headers[ci], doc)) {
+          th.appendChild(node);
+        }
+        headerRow.appendChild(th);
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      // データ行
+      const tbody = doc.createElement('tbody');
+      for (const rowCells of block.rows) {
+        const tr = doc.createElement('tr');
+        for (let ci = 0; ci < block.headers.length; ci++) {
+          const td = doc.createElement('td');
+          const align = block.alignments[ci] ?? 'none';
+          if (align !== 'none') td.style.textAlign = align;
+          for (const node of parseInline(rowCells[ci] ?? '', doc)) {
+            td.appendChild(node);
+          }
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+
+      wrapper.appendChild(table);
+      nodes.push(wrapper);
+      i++;
       continue;
     }
 

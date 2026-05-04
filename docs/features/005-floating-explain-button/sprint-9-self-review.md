@@ -116,3 +116,35 @@
 - typecheck: pass
 - build: pass
 - test: 322 passed（310 既存 + 12 新規）リグレッションなし
+
+---
+
+## F-504 拡張: テーブル対応追加
+
+### 追加した機能
+
+GFM 風パイプテーブル（`| col | col |\n|---|---|\n| a | b |`）のレンダリング対応。
+
+### 実装ファイル
+
+- `src/sidepanel/markdown.ts`:
+  - `ColAlign` 型・`TableBlock` インターフェース追加
+  - `splitTableRow()` / `parseSeparatorRow()` / `isTableRow()` ヘルパー追加
+  - `parseBlocks()` にパイプテーブル検出ロジック追加（ヘッダ行 + 区切り行 + 1 行以上のデータ行）
+  - `blocksToDOM()` に `table` ブロック → `<div class="md-table-wrapper"><table class="md-table">` 変換追加
+  - 各セルは既存 `parseInline()` を通してインライン記法を反映
+  - アライメントは `:` 位置から判定し `style.textAlign` に適用（ホワイトリスト: left/center/right）
+  - innerHTML 不使用、XSS 安全
+
+- `src/sidepanel/styles/base.css`:
+  - `.md-table-wrapper`（`overflow-x: auto`）と `.md-table`（border-collapse / padding / ヘッダ背景）追加
+
+- `test/markdown.test.ts`:
+  - テーブル関連 10 件を追加（349 → 359 件）
+  - 基本構造、インライン記法、アライメント、列数不揃い、前後段落共存、誤検出なし、XSS 3 件、wrapper 確認
+
+### 動作確認
+
+- typecheck: pass
+- build: pass（sidepanel.js 31.4kb）
+- test: 359 passed（349 既存 + 10 新規）リグレッションなし
