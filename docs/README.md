@@ -25,3 +25,4 @@
 | 003 | [003-selection-with-context](features/003-selection-with-context/) | Selection Explain にページ本文を文脈として併送、選択モード時の警告抑止 | 完了（Sprint 6 / Codex NO ISSUES） |
 | 004 | [004-merge-explain-into-chat](features/004-merge-explain-into-chat/) | Explain タブを撤廃し Chat に統合。クイックアクション 6 個（youtube-ai-extension 風） | 完了（Sprint 7 / Codex NO ISSUES） |
 | 005 | [005-floating-explain-button](features/005-floating-explain-button/) | ページ上のフローティング Explain ボタン（Shadow DOM）と Chat バブル Markdown レンダリング | 完了（Sprint 8-9 / Codex NO ISSUES） |
+| 006 | [006-speak-button](features/006-speak-button/) | フローティングツールチップに🔊 Speak ボタンを追加（Web Speech API・en-US） | 完了（Sprint 10 / Codex NO ISSUES） |

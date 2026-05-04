@@ -792,9 +792,9 @@ export function initChat(): void {
     void sendFreeInput();
   });
 
-  // Enter 送信 / Shift+Enter 改行（F-006）
+  // Shift+Enter で送信 / Enter は改行（F-006）
   els.chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
       void sendFreeInput();
     }

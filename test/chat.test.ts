@@ -461,7 +461,7 @@ describe('URL 変化時の状態リセット（F-008）', () => {
 // Enter キー送信（F-006 Should 要件）
 // ----------------------------------------------------------------
 describe('Enter キー送信（F-006）', () => {
-  it('Enter キーで送信される', async () => {
+  it('Shift+Enter で送信される', async () => {
     setupTabsSendMessage({ content: 'Page.', truncated: false, originalLength: 5 });
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'Answer.' }));
 
@@ -469,8 +469,8 @@ describe('Enter キー送信（F-006）', () => {
     initChat();
 
     const input = document.getElementById('chatInput') as HTMLTextAreaElement;
-    input.value = 'Enter key test';
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: false, bubbles: true }));
+    input.value = 'Shift+Enter test';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
     await flush(20);
 
     expect(mock.runtime.sendMessage).toHaveBeenCalled();
@@ -478,10 +478,10 @@ describe('Enter キー送信（F-006）', () => {
     const msg = callArgs[0] as { type: string; userMessage: string };
     expect(msg.type).toBe('CHAT');
     // userMessage にはページ本文が埋め込まれているため、元のテキストが含まれることを確認（F-403）
-    expect(msg.userMessage).toContain('Enter key test');
+    expect(msg.userMessage).toContain('Shift+Enter test');
   });
 
-  it('Shift+Enter では送信されない（改行扱い）', async () => {
+  it('Enter 単独では送信されない（改行扱い）', async () => {
     mock.runtime.sendMessage = vi.fn(() => Promise.resolve({ text: 'Answer.' }));
 
     const { initChat } = await import('../src/sidepanel/chat.js');
@@ -489,10 +489,10 @@ describe('Enter キー送信（F-006）', () => {
 
     const input = document.getElementById('chatInput') as HTMLTextAreaElement;
     input.value = 'Line 1';
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: false, bubbles: true }));
     await flush(10);
 
-    // Shift+Enter では sendMessage は呼ばれない
+    // Enter 単独では sendMessage は呼ばれない
     expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
   });
 });
