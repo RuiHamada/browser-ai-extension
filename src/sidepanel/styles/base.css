@@ -343,6 +343,106 @@ body {
   cursor: not-allowed;
 }
 
+/* ---------------------------------------------------------------- */
+/* Markdown レンダリング（F-504）: assistant バブル内の要素スタイル  */
+/* ---------------------------------------------------------------- */
+
+/* 見出し */
+.chat-bubble__body h1,
+.chat-bubble__body h2,
+.chat-bubble__body h3 {
+  font-weight: 700;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  line-height: 1.3;
+  color: #f0f0f0;
+}
+
+.chat-bubble__body h1 { font-size: 15px; }
+.chat-bubble__body h2 { font-size: 14px; }
+.chat-bubble__body h3 { font-size: 13px; }
+
+/* 段落 */
+.chat-bubble__body p {
+  margin-top: 4px;
+  margin-bottom: 4px;
+  line-height: 1.6;
+}
+
+/* リスト */
+.chat-bubble__body ul,
+.chat-bubble__body ol {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.chat-bubble__body li {
+  margin-bottom: 2px;
+  line-height: 1.5;
+}
+
+/* インラインコード */
+.chat-bubble__body code {
+  font-family: 'SFMono-Regular', 'Consolas', 'Menlo', monospace;
+  font-size: 12px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: #e2e8f0;
+}
+
+/* コードブロック（pre > code） */
+.chat-bubble__body pre.markdown-codeblock {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 6px 0;
+  overflow-x: auto;
+}
+
+.chat-bubble__body pre.markdown-codeblock code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: #d4d4d4;
+  white-space: pre;
+  display: block;
+}
+
+/* リンク */
+.chat-bubble__body a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.chat-bubble__body a:hover {
+  color: #93c5fd;
+}
+
+/* 太字・イタリック */
+.chat-bubble__body strong {
+  font-weight: 700;
+  color: #f0f0f0;
+}
+
+.chat-bubble__body em {
+  font-style: italic;
+  color: #d1d5db;
+}
+
+/* assistant バブルの body は white-space を通常に（Markdown が整形するため） */
+.chat-bubble--assistant .chat-bubble__body {
+  white-space: normal;
+}
+
+/* user バブルは pre-wrap のまま維持（プレーンテキスト・改行保持） */
+.chat-bubble--user .chat-bubble__body {
+  white-space: pre-wrap;
+}
+
 /* スクリーンリーダー専用 */
 .sr-only {
   position: absolute;

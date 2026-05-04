@@ -57,6 +57,16 @@ export type BackgroundMessage =
        */
       useShortPrompt?: boolean;
     }
+  | {
+      /** F-503: フローティングボタンクリック時に content script から background へ送るメッセージ */
+      type: 'FLOATING_EXPLAIN_REQUEST';
+      /** ユーザーが選択した文字列（空でない保証あり） */
+      selectionText: string;
+    }
+  | {
+      /** F-503: Side Panel が初期化完了したことを background に通知するメッセージ */
+      type: 'SIDE_PANEL_READY';
+    }
   ;
 
 // コンテンツスクリプトへ送るメッセージ型
@@ -68,6 +78,16 @@ export type ContentMessage =
 // バックグラウンドからサイドパネルへのブロードキャストメッセージ型
 export type BroadcastMessage =
   | { type: 'TAB_CHANGED'; url: string; tabId: number }
+  | {
+      /**
+       * F-503: background から Side Panel へ送る「クイックアクション自動実行」指示。
+       * actionId には既存クイックアクションの要素 ID（'qaExplainSelection' 等）を指定する。
+       */
+      type: 'QUICK_ACTION_AUTORUN';
+      actionId: string;
+      /** content script が取得した選択テキスト（Side Panel 側で GET_SELECTED_TEXT を省略できる） */
+      selectionText: string;
+    }
   ;
 
 export type Message = BackgroundMessage | ContentMessage | BroadcastMessage;

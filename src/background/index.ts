@@ -13,10 +13,19 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 // MV3 service worker は永続しないが、同一起動セッション内での重複防止には有効
 let lastBroadcastUrl = '';
 
+/**
+ * F-503: タブ ID ごとに「Side Panel が開いたら即座に実行すべきクイックアクション」を保持する。
+ * Side Panel の初期化が終わる前にメッセージが来た場合の取りこぼし防止用バッファ。
+ * TAB_CHANGED 発火時にそのタブの pending を破棄する。
+ */
+const pendingQuickAction: Map<number, { actionId: string; selectionText: string }> = new Map();
+
 /** TAB_CHANGED を broadcast する。同一 URL の連続通知はスキップする */
 function broadcastTabChanged(url: string, tabId: number): void {
   if (url === lastBroadcastUrl) return;
   lastBroadcastUrl = url;
+  // F-503: タブが変わったら pending なクイックアクションを破棄する（URL 変化でのリセット）
+  pendingQuickAction.delete(tabId);
   chrome.runtime.sendMessage({
     type: 'TAB_CHANGED',
     url,
@@ -123,6 +132,61 @@ async function handleMessage(
         history: message.history,
       });
       return { text: chatResult.text };
+    }
+
+    case 'FLOATING_EXPLAIN_REQUEST': {
+      // F-503: フローティングボタン → Side Panel の Explain 自動起動
+      const tabId = sender.tab?.id;
+      if (!tabId) return { error: 'No tab ID in sender' };
+
+      // Side Panel を開く（既に開いていても再オープンは sidePanel API が適切に処理する）
+      await chrome.sidePanel.open({ tabId });
+
+      // 戦略 A: broadcast が成功した（Side Panel が既に開いていた）場合は pending を立てない。
+      // broadcast が失敗した場合のみ pending に保存して SIDE_PANEL_READY 時に flush する。
+      // これにより「broadcast + pending flush の二重発火」を構造的に排除する。
+      let broadcastSucceeded = false;
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'QUICK_ACTION_AUTORUN',
+          actionId: 'qaExplainSelection',
+          selectionText: message.selectionText,
+        });
+        broadcastSucceeded = true;
+      } catch {
+        // Side Panel がまだ開いていない場合は無視（pending で対応する）
+      }
+
+      if (!broadcastSucceeded) {
+        // Side Panel がまだ開いていない → SIDE_PANEL_READY 受信時に flush する
+        pendingQuickAction.set(tabId, {
+          actionId: 'qaExplainSelection',
+          selectionText: message.selectionText,
+        });
+      }
+
+      return { ok: true };
+    }
+
+    case 'SIDE_PANEL_READY': {
+      // F-503: Side Panel 初期化完了通知 → pending state があれば flush する
+      const senderTabId = sender.tab?.id;
+      // Side Panel は chrome.tabs.query で自分のタブを特定するため sender.tab は undefined になりうる。
+      // その場合は現在アクティブなタブを取得して pending を探す。
+      let resolvedTabId: number | undefined = senderTabId;
+      if (!resolvedTabId) {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        resolvedTabId = activeTab?.id;
+      }
+
+      if (resolvedTabId !== undefined) {
+        const pending = pendingQuickAction.get(resolvedTabId);
+        if (pending) {
+          pendingQuickAction.delete(resolvedTabId);
+          return { pending };
+        }
+      }
+      return { pending: null };
     }
 
     default: {

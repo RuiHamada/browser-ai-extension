@@ -23,7 +23,7 @@ function maskApiKey(key: string): string {
 // モデル選択肢を動的に生成
 function buildModelOptions(): void {
   const select = $s('aiModel');
-  select.innerHTML = '';
+  select.replaceChildren();
   for (const model of AVAILABLE_MODELS) {
     const opt = document.createElement('option');
     opt.value = model.value;

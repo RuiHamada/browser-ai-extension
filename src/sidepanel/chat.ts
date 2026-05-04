@@ -4,6 +4,7 @@
 import type { ChatMessage } from '../types/messages.js';
 import { sanitizeErrorMessage, sanitizeErrorForLog } from '../lib/sanitize.js';
 import { CONTENT_MAX_CHARS, SELECTION_MAX_CHARS, SHORT_CONTENT_THRESHOLD } from '../content/extract.js';
+import { renderMarkdown } from './markdown.js';
 
 // ----------------------------------------------------------------
 // クイックアクション定義（F-402: ラベル・プロンプト本文は仕様で固定）
@@ -183,7 +184,15 @@ function appendMessageBubble(
 
   const body = document.createElement('div');
   body.classList.add('chat-bubble__body');
-  body.textContent = text;
+
+  if (role === 'assistant') {
+    // assistant バブルは Markdown レンダリング（F-504）
+    renderMarkdown(body, text);
+  } else {
+    // user / error / meta はプレーンテキスト（XSS 防止のため textContent を使用）
+    body.textContent = text;
+  }
+
   bubble.appendChild(body);
 
   els.chatMessages.appendChild(bubble);
@@ -659,6 +668,87 @@ export function clearPageContentCache(): void {
 }
 
 /**
+ * F-503: action ID とオプションの選択テキストを指定してクイックアクションを外部から起動する。
+ * Side Panel が QUICK_ACTION_AUTORUN を受信した際に呼ぶ。
+ * @param actionId QUICK_ACTIONS の id 文字列（例: 'qaExplainSelection'）
+ * @param injectedSelectionText フローティングボタンから渡された選択テキスト（省略時は tabs から取得）
+ */
+export async function triggerQuickActionById(
+  actionId: string,
+  injectedSelectionText?: string,
+): Promise<void> {
+  const qa = QUICK_ACTIONS.find((q) => q.id === actionId);
+  if (!qa) {
+    console.error('[chat] triggerQuickActionById: 未知の actionId:', actionId);
+    return;
+  }
+
+  // selection 種別で injectedSelectionText が渡された場合は
+  // fetchSelectedText() の代わりにそのテキストを直接使う。
+  // currentSelectionText に先行セットすることで prepareSelectionMessage が再利用できる。
+  if (qa.kind === 'selection' && injectedSelectionText) {
+    // 直接 selectionText を注入するため、prepareSelectionMessage の内部経路を通らず
+    // 自前でコンテキスト組み立てを行う。
+    if (isSending) return;
+
+    let els: ChatElements;
+    try {
+      els = getElements();
+    } catch (e) {
+      console.error('[chat] DOM要素取得エラー:', e);
+      return;
+    }
+
+    const myGen = currentGeneration;
+    abortShortWarning();
+    hideShortWarning(els);
+    setSending(true, els);
+
+    try {
+      const selectionText = injectedSelectionText.trim();
+      if (!selectionText) {
+        appendMessageBubble('error', 'No text is selected. Please select some text on the page first.', els);
+        return;
+      }
+
+      const pageContent = await fetchPageContent();
+      if (isStale(myGen)) return;
+
+      const truncatedSelection = selectionText.length > SELECTION_MAX_CHARS
+        ? selectionText.slice(0, SELECTION_MAX_CHARS - 1) + '…'
+        : selectionText;
+
+      let apiContent: string;
+      if (pageContent.trim()) {
+        apiContent =
+          `Page context (for reference, do not summarize this):\n<page>\n${pageContent}\n</page>\n\n` +
+          `Explain the following selection within that context:\n<selection>\n${truncatedSelection}\n</selection>`;
+      } else {
+        apiContent = `Please explain the following text:\n\n${truncatedSelection}`;
+      }
+
+      const useShortPrompt = selectionText.length < SHORT_CONTENT_THRESHOLD;
+
+      // HIGH-2: コンテキストモードをセット
+      currentContextMode = 'selection';
+      currentSelectionText = selectionText;
+
+      await doSendMessage(qa.prompt, apiContent, useShortPrompt, els, myGen);
+    } catch (e) {
+      const safeLog = sanitizeErrorForLog(e);
+      console.error('[chat] triggerQuickActionById エラー:', safeLog.message, safeLog.stack ?? '');
+      const rawMsg = e instanceof Error ? e.message : String(e);
+      appendMessageBubble('error', sanitizeErrorMessage(rawMsg), els);
+    } finally {
+      setSending(false, els);
+    }
+  } else {
+    // selection テキスト注入なし or whole-page 系は通常の runQuickAction に委譲
+    await runQuickAction(qa);
+  }
+}
+
+/**
  * Chat 履歴と画面をクリアして Welcome メッセージを再表示する（F-404）。
  * URL 変化（F-008）や Clear ボタン押下で呼ぶ。
  */
@@ -673,7 +763,7 @@ export function resetChat(): void {
   abortShortWarning();
   try {
     const els = getElements();
-    els.chatMessages.innerHTML = '';
+    els.chatMessages.replaceChildren();
     hideShortWarning(els);
     els.chatInput.value = '';
     setSending(false, els);
