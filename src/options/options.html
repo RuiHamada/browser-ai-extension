@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Settings - Browser AI Companion</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #f0f0f0;
+      padding: 28px;
+      max-width: 620px;
+      margin: 0 auto;
+    }
+    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+    .logo {
+      width: 38px; height: 38px;
+      background: #3b82f6;
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    h1 { font-size: 20px; }
+    h1 small { font-size: 13px; color: #9ca3af; display: block; }
+    .section {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 11px;
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: 13px; font-weight: 700; color: #3b82f6;
+      margin-bottom: 14px; padding-bottom: 7px; border-bottom: 1px solid #333;
+    }
+    .field { margin-bottom: 14px; }
+    .field:last-child { margin-bottom: 0; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: #d1d5db; }
+    .field-desc { font-size: 11px; color: #6b7280; margin-bottom: 6px; }
+    input[type=text], input[type=password], select {
+      width: 100%; background: #222; border: 1px solid #444;
+      color: #f0f0f0; border-radius: 7px; padding: 9px 13px; font-size: 13px;
+    }
+    input:focus, select:focus { outline: none; border-color: #3b82f6; }
+    .input-row { display: flex; gap: 8px; }
+    .input-row input { flex: 1; }
+    .btn {
+      padding: 9px 16px; border-radius: 7px; border: none;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-secondary { background: #222; border: 1px solid #444; color: #f0f0f0; }
+    .btn-secondary:hover { background: #2a2a2a; }
+    .btn-danger { background: #222; border: 1px solid #7f1d1d; color: #ef4444; }
+    .btn-danger:hover { background: #2a0a0a; }
+    .save-btn {
+      width: 100%; padding: 12px;
+      background: #3b82f6; color: white; border: none;
+      border-radius: 9px; font-size: 14px; font-weight: 700;
+      cursor: pointer; margin-top: 6px;
+    }
+    .save-btn:hover { background: #2563eb; }
+    .status {
+      font-size: 12px; padding: 7px 11px;
+      border-radius: 6px; margin-top: 7px; display: none;
+    }
+    .status.show { display: block; }
+    .status.success { background: rgba(34,197,94,.2); color: #22c55e; }
+    .status.error { background: rgba(239,68,68,.2); color: #ef4444; }
+    a { color: #3b82f6; }
+    .key-actions { display: flex; gap: 8px; margin-top: 6px; }
+    .masked-note { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    .api-key-mask { font-size: 12px; color: #9ca3af; margin-top: 5px; display: none; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">AI</div>
+    <h1>Settings<small>Browser AI Companion</small></h1>
+  </div>
+
+  <div class="section">
+    <div class="section-title">AI Configuration</div>
+
+    <div class="field">
+      <label for="apiKey">Anthropic API Key</label>
+      <div class="field-desc">
+        Get your key at <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>.
+        The key is stored locally only and never synced.
+      </div>
+      <input type="password" id="apiKey" placeholder="Enter new key to replace...">
+      <span id="apiKeyMask" class="api-key-mask"></span>
+      <div class="key-actions">
+        <button class="btn btn-danger" id="btnClearApiKey" type="button">Clear Key</button>
+      </div>
+      <p class="masked-note">
+        Leave blank to keep the existing key. The saved key is never shown in plain text.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="aiModel">Model</label>
+      <select id="aiModel">
+        <!-- JavaScriptで動的に生成 -->
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Output Language</label>
+      <div class="field-desc">The explanation output language. Currently fixed to English.</div>
+      <input type="text" value="English" disabled style="background:#111; color:#6b7280;">
+    </div>
+  </div>
+
+  <div id="saveStatus" class="status"></div>
+  <button class="save-btn" id="btnSave" type="button">Save Settings</button>
+
+  <script src="/dist/options.js"></script>
+</body>
+</html>

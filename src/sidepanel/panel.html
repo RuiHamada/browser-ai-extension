@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browser AI Companion</title>
+  <link rel="stylesheet" href="styles/base.css">
+</head>
+<body>
+  <!-- ヘッダ -->
+  <header class="header">
+    <div class="header-logo">
+      <span class="header-icon">AI</span>
+      <span class="header-title">Browser AI Companion</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="btnSettings" title="Settings">&#x2699;</button>
+    </div>
+  </header>
+
+  <!-- 現在のページURL表示（F-009） -->
+  <div class="url-bar">
+    <span class="url-label">Page:</span>
+    <span class="url-text" id="currentUrl">Loading...</span>
+  </div>
+
+  <!-- APIキー未設定の警告（F-010） -->
+  <div id="apiKeyWarning" class="api-key-warning hidden">
+    <div class="warning-icon">&#x26A0;</div>
+    <div class="warning-body">
+      <strong>API key is not configured.</strong>
+      <p>Please set your Anthropic API key to use Explain and Chat features.</p>
+      <button class="btn btn-primary" id="linkToOptions" type="button">Open Settings</button>
+    </div>
+  </div>
+
+  <!-- メインコンテンツ（APIキー設定済み時のみ表示） -->
+  <div id="mainContent" class="main-content hidden">
+    <!-- タブバー（F-007） -->
+    <div class="tab-bar" role="tablist">
+      <button class="tab-btn active" id="tabBtnExplain" role="tab" aria-selected="true" aria-controls="tabExplain">
+        Explain
+      </button>
+      <button class="tab-btn" id="tabBtnChat" role="tab" aria-selected="false" aria-controls="tabChat">
+        Chat
+      </button>
+    </div>
+
+    <!-- Explain タブ（F-005） -->
+    <div class="tab-panel" id="tabExplain" role="tabpanel" aria-labelledby="tabBtnExplain">
+      <!-- 実行ボタン（F-004: 全体/選択切り替え） -->
+      <div class="explain-actions">
+        <button class="btn btn-primary" id="btnExplainWhole" type="button">
+          Explain whole page
+        </button>
+        <button class="btn btn-secondary" id="btnExplainSelection" type="button">
+          Selection only
+        </button>
+      </div>
+
+      <!-- ローディング表示 -->
+      <div class="loading hidden" id="explainLoading" aria-live="polite">
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <span>Generating explanation...</span>
+      </div>
+
+      <!-- 切り詰め通知（F-012） -->
+      <div class="truncated-notice hidden" id="truncatedNotice" aria-live="polite"></div>
+
+      <!-- エラー表示（F-011） -->
+      <div class="error-msg hidden" id="explainError" role="alert"></div>
+
+      <!-- 解説結果（F-005） -->
+      <div class="explain-result hidden" id="explainResult" aria-live="polite"></div>
+    </div>
+
+    <!-- Chat タブ（F-006） -->
+    <div class="tab-panel hidden" id="tabChat" role="tabpanel" aria-labelledby="tabBtnChat">
+      <!-- 会話履歴表示エリア -->
+      <div class="chat-messages" id="chatMessages" aria-live="polite" aria-label="Chat history"></div>
+
+      <!-- ローディング表示 -->
+      <div class="loading hidden" id="chatLoading" aria-live="polite">
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <span>Waiting for response...</span>
+      </div>
+
+      <!-- エラー表示（F-011） -->
+      <div class="error-msg hidden" id="chatError" role="alert"></div>
+
+      <!-- 入力エリア -->
+      <div class="chat-input-area">
+        <label for="chatInput" class="sr-only">Message</label>
+        <textarea
+          id="chatInput"
+          class="chat-input"
+          placeholder="Ask a question about this page... (Enter to send, Shift+Enter for newline)"
+          rows="3"
+          aria-label="Chat message input"
+        ></textarea>
+        <div class="chat-actions">
+          <button class="btn btn-primary" id="btnChatSend" type="button">Send</button>
+          <button class="btn btn-secondary" id="btnChatClear" type="button">Clear</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/dist/sidepanel.js"></script>
+</body>
+</html>

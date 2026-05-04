@@ -1,0 +1,22 @@
+{
+  "name": "browser-ai-extension",
+  "version": "0.1.0",
+  "description": "任意のWebページのDOMを読み取り、英文での解説（Explain）とAIチャットを提供するChrome拡張機能（MV3）",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "check": "tsc --noEmit && node build.mjs",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/chrome": "^0.1.40",
+    "chrome-types": "^0.1.416",
+    "esbuild": "^0.27.3",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
+  }
+}

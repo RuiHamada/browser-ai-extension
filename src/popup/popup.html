@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 260px; padding: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f; color: #fff; margin: 0;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .logo-icon {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; color: white;
+    }
+    .logo-text { font-size: 13px; font-weight: 700; line-height: 1.3; }
+    .logo-sub { font-size: 10px; color: #9ca3af; }
+    .btn {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; padding: 9px 12px; margin-bottom: 7px;
+      background: #1f1f1f; border: 1px solid #333;
+      border-radius: 7px; color: #fff; font-size: 12px;
+      cursor: pointer; transition: background 0.15s; box-sizing: border-box;
+      text-align: left;
+    }
+    .btn:hover { background: #2a2a2a; }
+    .btn-primary { background: #3b82f6; border-color: #3b82f6; }
+    .btn-primary:hover { background: #2563eb; }
+    #status { font-size: 11px; color: #6b7280; text-align: center; margin-top: 7px; }
+    .warning {
+      font-size: 11px; color: #f59e0b;
+      background: rgba(245,158,11,.1);
+      border: 1px solid rgba(245,158,11,.3);
+      border-radius: 6px; padding: 8px 10px;
+      margin-top: 8px; line-height: 1.5;
+    }
+    .warning a { color: #3b82f6; cursor: pointer; text-decoration: underline; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="logo">
+    <div class="logo-icon">AI</div>
+    <div class="logo-text">
+      Browser AI Companion
+      <div class="logo-sub">Web Page Explainer</div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="openPanel" type="button">Open Side Panel</button>
+  <button class="btn" id="openOptions" type="button">Settings</button>
+
+  <!-- APIキー未設定時の警告（F-010） -->
+  <div id="apiKeyWarning" class="warning hidden">
+    API key is not set.
+    <a id="linkToOptions">Open Settings</a> to add your Anthropic API key.
+  </div>
+
+  <div id="status">Checking...</div>
+
+  <script src="/dist/popup.js"></script>
+</body>
+</html>

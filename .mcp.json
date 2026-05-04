@@ -1,0 +1,88 @@
+{
+  "mcpServers": {
+    "azure": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@azure/mcp@latest",
+        "server",
+        "start"
+      ],
+      "env": {
+        "AZURE_MCP_COLLECT_TELEMETRY": "false"
+      }
+    },
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "@rxreyn3/azure-devops-mcp@latest"],
+      "env": {
+        "ADO_ORGANIZATION": "https://dev.azure.com/your-organization",
+        "ADO_PROJECT": "your-project-name",
+        "ADO_PAT": "your-personal-access-token"
+      },
+      "disabled": false
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "env": {}
+    },
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server"
+      ],
+      "disabled": false
+    },
+    "serena": {
+      "command": "./mcp-serena.sh"
+    },
+    "gcloud": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/gcloud-mcp"],
+      "disabled": false
+    },
+    "gcs": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/storage-mcp"],
+      "disabled": false
+    },
+    "observability": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/observability-mcp"]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "filesystem": {
+      "command": "./mcp-root.sh"
+    },
+    "aws": {
+      "command": "uvx",
+      "args": ["awslabs.aws-api-mcp-server@latest"],
+      "env": {
+        "AWS_REGION": "ap-northeast-1",
+        "AWS_PROFILE": "galois-sso",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false
+    },
+    "kaggle": {
+      "command": "uvx",
+      "args": ["kaggle-mcp"],
+      "disabled": false
+    },
+    "tavily": {
+      "command": "npx",
+      "args": ["-y", "tavily-mcp@latest"],
+      "env": {
+        "TAVILY_API_KEY": "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"
+      }
+    }
+  }
+}
