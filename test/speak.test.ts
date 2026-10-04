@@ -169,6 +169,8 @@ describe('Speak ボタン（F-601/F-602/F-603）', () => {
 
   beforeEach(async () => {
     mock = installChromeMock();
+    // 選択確定と同時に自動解説の CHAT が送られるため、解説の応答を返しておく
+    mock.runtime.sendMessage.mockResolvedValue({ text: 'Explanation.' });
     speechMock = installSpeechSynthesisMock();
     document.body.innerHTML = '<p id="content">Hello world test content</p>';
     vi.useFakeTimers();
@@ -505,11 +507,13 @@ describe('Speak ボタン（F-601/F-602/F-603）', () => {
     mockSelection('Hello world');
     document.dispatchEvent(new Event('selectionchange'));
     await advanceDebounce();
+    // 選択確定時に送られる自動解説の CHAT は対象外。Speak クリック以降の送信だけを見る
+    mock.runtime.sendMessage.mockClear();
 
     getSpeakBtn()!.click();
     await Promise.resolve();
 
-    // sendMessage は呼ばれていない（または Explain のみ）
+    // Speak クリックでは sendMessage は呼ばれていない
     const calls = mock.runtime.sendMessage.mock.calls;
     const speakRelatedCalls = calls.filter((call) => {
       const msg = call[0] as { type?: string };

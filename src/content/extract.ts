@@ -34,6 +34,9 @@ function collectText(node: Node, parts: string[]): void {
   if (node.nodeType === Node.ELEMENT_NODE) {
     const el = node as Element;
 
+    // 拡張機能がページ上に挿入したポップアップを本文に混ぜない。
+    if (el.id === 'browser-ai-floating-host') return;
+
     // 除外タグはスキップ（SVG名前空間は tagName が小文字になるため toUpperCase で統一）
     if (EXCLUDED_TAGS.has(el.tagName.toUpperCase())) return;
 

@@ -78,6 +78,74 @@ async function advanceDebounce(): Promise<void> {
 }
 
 describe('フローティング Explain ボタン（F-501/F-502）', () => {
+  it('選択確定後に解説を自動表示し、同じ選択の再評価では再送しない', async () => {
+    let resolveExplain!: (value: { text: string }) => void;
+    mock.runtime.sendMessage.mockImplementation(() => new Promise((resolve) => { resolveExplain = resolve; }));
+    mockSelection('selected text here');
+    document.dispatchEvent(new Event('selectionchange'));
+    await advanceDebounce();
+
+    // デバウンス後、追加の待ちなしで送信される
+    const popup = document.getElementById('browser-ai-floating-host')?.shadowRoot?.getElementById('explanation');
+    expect(popup?.textContent).toBe('解説を生成中…');
+    expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mock.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'CHAT' }));
+
+    resolveExplain({ text: 'A concise explanation.' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(popup?.textContent).toBe('A concise explanation.');
+
+    document.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(100);
+    await Promise.resolve();
+    expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('ドラッグ中は送信せず、選択確定後に送信する', async () => {
+    mock.runtime.sendMessage.mockResolvedValue({ text: 'Explanation.' });
+    document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    mockSelection('dragged text');
+    document.dispatchEvent(new Event('selectionchange'));
+    await advanceDebounce();
+    vi.advanceTimersByTime(200);
+    expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
+
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    await advanceDebounce();
+    vi.advanceTimersByTime(130);
+    await Promise.resolve();
+    expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('前の選択の回答が遅れても現在のポップアップを上書きしない', async () => {
+    let resolveFirst!: (value: { text: string }) => void;
+    mock.runtime.sendMessage
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValue({ text: 'New explanation.' });
+
+    mockSelection('first selection');
+    document.dispatchEvent(new Event('selectionchange'));
+    await advanceDebounce();
+    vi.advanceTimersByTime(130);
+    await Promise.resolve();
+
+    mockSelection('second selection');
+    document.dispatchEvent(new Event('selectionchange'));
+    await advanceDebounce();
+    vi.advanceTimersByTime(130);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const popup = document.getElementById('browser-ai-floating-host')?.shadowRoot?.getElementById('explanation');
+    expect(popup?.textContent).toBe('New explanation.');
+    resolveFirst({ text: 'Old explanation.' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(popup?.textContent).toBe('New explanation.');
+  });
+
   it('2 文字未満の選択ではホスト要素が表示されない', async () => {
     mockSelection('a');
     document.dispatchEvent(new Event('selectionchange'));
