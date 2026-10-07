@@ -85,6 +85,7 @@ describe('sidepanel F-503: SIDE_PANEL_READY 送信', () => {
       if (m.type === 'SIDE_PANEL_READY') {
         return Promise.resolve({
           pending: {
+            kind: 'autorun',
             actionId: 'qaExplainSelection',
             selectionText: 'floating selected text',
           },

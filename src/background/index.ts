@@ -1,7 +1,7 @@
 // バックグラウンドサービスワーカー: メッセージルータ
 // MV3制約: service worker は永続しないため、モジュールスコープに状態を置かない
 
-import type { BackgroundMessage } from '../types/messages.js';
+import type { BackgroundMessage, BroadcastMessage, PendingSidePanelAction } from '../types/messages.js';
 import { saveSettings, loadSettings } from '../lib/storage.js';
 import { callClaudeAPI, getShortExplainSystemPrompt, getChatSystemPromptBase } from '../lib/claude.js';
 import { sanitizeErrorMessage, sanitizeErrorForLog } from '../lib/sanitize.js';
@@ -14,18 +14,18 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 let lastBroadcastUrl = '';
 
 /**
- * F-503: タブ ID ごとに「Side Panel が開いたら即座に実行すべきクイックアクション」を保持する。
+ * F-503: タブ ID ごとに「Side Panel が開いたら即座に実行すべき処理」を保持する（直近 1 件）。
  * Side Panel の初期化が終わる前にメッセージが来た場合の取りこぼし防止用バッファ。
  * TAB_CHANGED 発火時にそのタブの pending を破棄する。
  */
-const pendingQuickAction: Map<number, { actionId: string; selectionText: string }> = new Map();
+const pendingSidePanelAction: Map<number, PendingSidePanelAction> = new Map();
 
 /** TAB_CHANGED を broadcast する。同一 URL の連続通知はスキップする */
 function broadcastTabChanged(url: string, tabId: number): void {
   if (url === lastBroadcastUrl) return;
   lastBroadcastUrl = url;
-  // F-503: タブが変わったら pending なクイックアクションを破棄する（URL 変化でのリセット）
-  pendingQuickAction.delete(tabId);
+  // F-503: タブが変わったら pending を破棄する（URL 変化でのリセット）
+  pendingSidePanelAction.delete(tabId);
   chrome.runtime.sendMessage({
     type: 'TAB_CHANGED',
     url,
@@ -33,6 +33,28 @@ function broadcastTabChanged(url: string, tabId: number): void {
   }).catch(() => {
     // サイドパネルが開いていない場合は無視
   });
+}
+
+/**
+ * Side Panel へ broadcast し、届かなければ（まだ開いていなければ）pending に保存して
+ * SIDE_PANEL_READY 受信時に flush する。
+ * broadcast が成功した場合は pending を立てない。これにより
+ * 「broadcast + pending flush の二重発火」を構造的に排除する。
+ * @returns broadcast が Side Panel に届いたかどうか
+ */
+async function deliverToSidePanel(
+  tabId: number | undefined,
+  broadcast: BroadcastMessage,
+  pending: PendingSidePanelAction,
+): Promise<boolean> {
+  try {
+    await chrome.runtime.sendMessage(broadcast);
+    return true;
+  } catch {
+    // Side Panel がまだ開いていない → SIDE_PANEL_READY 受信時に flush する
+    if (tabId !== undefined) pendingSidePanelAction.set(tabId, pending);
+    return false;
+  }
 }
 
 // タブ変更時にサイドパネルへ通知（F-008: ページ変更検知）
@@ -86,7 +108,7 @@ async function handleMessage(
 ): Promise<unknown> {
   switch (message.type) {
     case 'OPEN_SIDE_PANEL': {
-      // サイドパネルを開く（ポップアップからの呼び出し）
+      // サイドパネルを開く（ポップアップ・フローティングボタンからの呼び出し）
       const tabId = sender.tab?.id;
       if (tabId) {
         await chrome.sidePanel.open({ tabId });
@@ -135,37 +157,41 @@ async function handleMessage(
     }
 
     case 'FLOATING_EXPLAIN_REQUEST': {
-      // F-503: フローティングボタン → Side Panel の Explain 自動起動
+      // F-503: フローティングボタン → Side Panel を開いて解説を表示する
       const tabId = sender.tab?.id;
       if (!tabId) return { error: 'No tab ID in sender' };
 
       // Side Panel を開く（既に開いていても再オープンは sidePanel API が適切に処理する）
       await chrome.sidePanel.open({ tabId });
 
-      // 戦略 A: broadcast が成功した（Side Panel が既に開いていた）場合は pending を立てない。
-      // broadcast が失敗した場合のみ pending に保存して SIDE_PANEL_READY 時に flush する。
-      // これにより「broadcast + pending flush の二重発火」を構造的に排除する。
-      let broadcastSucceeded = false;
-      try {
-        await chrome.runtime.sendMessage({
-          type: 'QUICK_ACTION_AUTORUN',
-          actionId: 'qaExplainSelection',
-          selectionText: message.selectionText,
-        });
-        broadcastSucceeded = true;
-      } catch {
-        // Side Panel がまだ開いていない場合は無視（pending で対応する）
-      }
-
-      if (!broadcastSucceeded) {
-        // Side Panel がまだ開いていない → SIDE_PANEL_READY 受信時に flush する
-        pendingQuickAction.set(tabId, {
-          actionId: 'qaExplainSelection',
-          selectionText: message.selectionText,
-        });
+      if (message.explanation) {
+        // ポップアップで解説済み: Side Panel で解説をやり直さず、その往復を Chat に投稿する
+        await deliverToSidePanel(
+          tabId,
+          { type: 'EXPLAIN_RESULT', selectionText: message.selectionText, explanation: message.explanation },
+          { kind: 'exchange', selectionText: message.selectionText, explanation: message.explanation },
+        );
+      } else {
+        // 解説がまだない: Side Panel 側で Explain selection を自動実行する
+        await deliverToSidePanel(
+          tabId,
+          { type: 'QUICK_ACTION_AUTORUN', actionId: 'qaExplainSelection', selectionText: message.selectionText },
+          { kind: 'autorun', actionId: 'qaExplainSelection', selectionText: message.selectionText },
+        );
       }
 
       return { ok: true };
+    }
+
+    case 'FLOATING_EXPLAIN_RESULT': {
+      // ポップアップの自動解説が完了 → Side Panel の Chat に往復として投稿する。
+      // Side Panel が閉じていれば直近 1 件として保持し、開いたときに流す（Side Panel は開かない）。
+      const delivered = await deliverToSidePanel(
+        sender.tab?.id,
+        { type: 'EXPLAIN_RESULT', selectionText: message.selectionText, explanation: message.explanation },
+        { kind: 'exchange', selectionText: message.selectionText, explanation: message.explanation },
+      );
+      return { ok: true, delivered };
     }
 
     case 'SIDE_PANEL_READY': {
@@ -180,9 +206,9 @@ async function handleMessage(
       }
 
       if (resolvedTabId !== undefined) {
-        const pending = pendingQuickAction.get(resolvedTabId);
+        const pending = pendingSidePanelAction.get(resolvedTabId);
         if (pending) {
-          pendingQuickAction.delete(resolvedTabId);
+          pendingSidePanelAction.delete(resolvedTabId);
           return { pending };
         }
       }

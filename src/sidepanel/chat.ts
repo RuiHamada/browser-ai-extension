@@ -815,3 +815,56 @@ export function initChat(): void {
     }
   }
 }
+
+// ----------------------------------------------------------------
+// ページ上のポップアップで解説済みの往復を Chat に追加する
+// ----------------------------------------------------------------
+
+/** user バブル・履歴に載せる選択テキストの上限文字数（長い選択で画面が埋まらないように） */
+const SELECTION_DISPLAY_MAX_CHARS = 300;
+
+/** 選択テキストを user バブル用の表示文に整形する */
+function formatSelectionForDisplay(selectionText: string): string {
+  const shown = selectionText.length > SELECTION_DISPLAY_MAX_CHARS
+    ? selectionText.slice(0, SELECTION_DISPLAY_MAX_CHARS - 1) + '…'
+    : selectionText;
+  return `Explain: "${shown}"`;
+}
+
+/**
+ * ページ上のポップアップで取得済みの解説を、API を呼ばずに Chat の往復として追加する。
+ * background からの EXPLAIN_RESULT broadcast、または SIDE_PANEL_READY の pending flush で呼ばれる。
+ * - user バブルには選択テキスト、assistant バブルには解説（Markdown）を表示し、履歴にも積む
+ * - 以降の自由入力は selection モードの follow-up として、この選択を文脈に使う（HIGH-2 と同じ扱い）
+ * - 同じ往復が直前に追加済みなら何もしない（broadcast と Explain ボタンの両方から届いた場合の重複排除）
+ */
+export function appendSelectionExchange(selectionText: string, explanation: string): void {
+  const selection = selectionText.trim();
+  const answer = explanation.trim();
+  if (!selection || !answer) return;
+
+  let els: ChatElements;
+  try {
+    els = getElements();
+  } catch (e) {
+    console.error('[chat] DOM要素取得エラー:', e);
+    return;
+  }
+
+  const displayText = formatSelectionForDisplay(selection);
+  const [prevUser, prevAssistant] = chatHistory.slice(-2);
+  if (
+    prevUser?.role === 'user' && prevUser.content === displayText &&
+    prevAssistant?.role === 'assistant' && prevAssistant.content === answer
+  ) {
+    return;
+  }
+
+  chatHistory.push({ role: 'user', content: displayText });
+  chatHistory.push({ role: 'assistant', content: answer });
+  currentContextMode = 'selection';
+  currentSelectionText = selection;
+
+  appendMessageBubble('user', displayText, els);
+  appendMessageBubble('assistant', answer, els);
+}

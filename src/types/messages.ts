@@ -62,6 +62,20 @@ export type BackgroundMessage =
       type: 'FLOATING_EXPLAIN_REQUEST';
       /** ユーザーが選択した文字列（空でない保証あり） */
       selectionText: string;
+      /**
+       * ページ上のポップアップで解説済みの場合、その本文。
+       * 指定時は Side Panel で解説をやり直さず、この往復をそのまま Chat に投稿する。
+       */
+      explanation?: string;
+    }
+  | {
+      /**
+       * 選択時の自動解説（ページ上のポップアップ）が完了したことを content script から通知する。
+       * background は Side Panel の Chat に往復として投稿する（開いていなければ直近 1 件を保持）。
+       */
+      type: 'FLOATING_EXPLAIN_RESULT';
+      selectionText: string;
+      explanation: string;
     }
   | {
       /** F-503: Side Panel が初期化完了したことを background に通知するメッセージ */
@@ -88,6 +102,26 @@ export type BroadcastMessage =
       /** content script が取得した選択テキスト（Side Panel 側で GET_SELECTED_TEXT を省略できる） */
       selectionText: string;
     }
+  | {
+      /** background から Side Panel へ送る「解説済みの往復を Chat に追加」指示（API は呼ばない） */
+      type: 'EXPLAIN_RESULT';
+      selectionText: string;
+      explanation: string;
+    }
   ;
+
+/**
+ * Side Panel が開くまで background が保持し、SIDE_PANEL_READY 時に流す処理（タブごとに直近 1 件）。
+ * - autorun: Side Panel 側でクイックアクションを実行する（API 呼び出しあり）
+ * - exchange: 解説済みの往復を Chat に追加する（API 呼び出しなし）
+ */
+export type PendingSidePanelAction =
+  | { kind: 'autorun'; actionId: string; selectionText: string }
+  | { kind: 'exchange'; selectionText: string; explanation: string };
+
+/** SIDE_PANEL_READY への background の応答 */
+export interface SidePanelReadyResponse {
+  pending: PendingSidePanelAction | null;
+}
 
 export type Message = BackgroundMessage | ContentMessage | BroadcastMessage;

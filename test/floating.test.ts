@@ -100,7 +100,8 @@ describe('フローティング Explain ボタン（F-501/F-502）', () => {
     document.dispatchEvent(new Event('scroll'));
     vi.advanceTimersByTime(100);
     await Promise.resolve();
-    expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(1);
+    // 解説の完了後は FLOATING_EXPLAIN_RESULT も送られるため、CHAT の送信回数だけを見る
+    expect(mock.runtime.sendMessage.mock.calls.filter((c) => (c[0] as { type?: string })?.type === 'CHAT')).toHaveLength(1);
   });
 
   it('ドラッグ中は送信せず、選択確定後に送信する', async () => {
@@ -116,7 +117,7 @@ describe('フローティング Explain ボタン（F-501/F-502）', () => {
     await advanceDebounce();
     vi.advanceTimersByTime(130);
     await Promise.resolve();
-    expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mock.runtime.sendMessage.mock.calls.filter((c) => (c[0] as { type?: string })?.type === 'CHAT')).toHaveLength(1);
   });
 
   it('前の選択の回答が遅れても現在のポップアップを上書きしない', async () => {
