@@ -63,6 +63,51 @@ describe('callClaudeAPI', () => {
     expect(result.text).toBe('This is an explanation.');
   });
 
+  it('思考ブロックが先頭にあっても text ブロックの本文を返す（Sonnet 5 / 5.5）', async () => {
+    mock.storage.local._data['apiKey'] = 'sk-ant-test-key';
+    mock.storage.local._data['aiModel'] = 'claude-sonnet-5-5';
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({
+        stop_reason: 'end_turn',
+        content: [
+          { type: 'thinking', thinking: '', signature: 'sig' },
+          { type: 'text', text: 'This is ' },
+          { type: 'text', text: 'an explanation.' },
+        ],
+      }),
+    });
+    const { callClaudeAPI } = await import('../src/lib/claude.js');
+    const result = await callClaudeAPI({ prompt: 'Explain this.' });
+    expect(result.text).toBe('This is an explanation.');
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { model: string };
+    expect(body.model).toBe('claude-sonnet-5-5');
+  });
+
+  it('stop_reason が refusal のときは辞退を示すエラーを投げる', async () => {
+    mock.storage.local._data['apiKey'] = 'sk-ant-test-key';
+    mock.storage.local._data['aiModel'] = 'claude-sonnet-5-5';
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'cyber' }, content: [] }),
+    });
+    const { callClaudeAPI } = await import('../src/lib/claude.js');
+    await expect(callClaudeAPI({ prompt: 'Explain this.' })).rejects.toThrow(/Request declined/);
+  });
+
+  it('text ブロックが 1 つもない応答は形式エラーにする', async () => {
+    mock.storage.local._data['apiKey'] = 'sk-ant-test-key';
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '', signature: 'sig' }] }),
+    });
+    const { callClaudeAPI } = await import('../src/lib/claude.js');
+    await expect(callClaudeAPI({ prompt: 'Explain this.' })).rejects.toThrow(/Unexpected response format/);
+  });
+
   it('APIキーが fetch ヘッダのみで使われ、戻り値に含まれない（セキュリティ）', async () => {
     mock.storage.local._data['apiKey'] = 'sk-ant-secret-99999';
     setupSuccessFetch('Explanation here.');

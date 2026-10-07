@@ -65,9 +65,9 @@ describe('background メッセージルータ', () => {
   });
 
   it('SAVE_SETTINGS: chrome.storage.local に保存される', async () => {
-    await callListener({ type: 'SAVE_SETTINGS', settings: { apiKey: 'sk-ant-secret-xxxxx', aiModel: 'claude-sonnet-4-6' } });
+    await callListener({ type: 'SAVE_SETTINGS', settings: { apiKey: 'sk-ant-secret-xxxxx', aiModel: 'claude-sonnet-5-5' } });
     expect(mock.storage.local._data['apiKey']).toBe('sk-ant-secret-xxxxx');
-    expect(mock.storage.local._data['aiModel']).toBe('claude-sonnet-4-6');
+    expect(mock.storage.local._data['aiModel']).toBe('claude-sonnet-5-5');
     expect(mock.storage.sync.set).not.toHaveBeenCalled();
   });
 

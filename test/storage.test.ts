@@ -24,19 +24,19 @@ describe('lib/storage', () => {
 
   it('loadSettings: 保存済みの値が読み出される', async () => {
     mock.storage.local._data['apiKey'] = 'sk-ant-xyz';
-    mock.storage.local._data['aiModel'] = 'claude-sonnet-4-6';
+    mock.storage.local._data['aiModel'] = 'claude-sonnet-5-5';
     const { loadSettings } = await import('../src/lib/storage.js');
     const settings = await loadSettings();
     expect(settings.apiKey).toBe('sk-ant-xyz');
-    expect(settings.aiModel).toBe('claude-sonnet-4-6');
+    expect(settings.aiModel).toBe('claude-sonnet-5-5');
   });
 
   it('saveSettings: chrome.storage.local にのみ保存し sync は呼ばない', async () => {
     const { saveSettings } = await import('../src/lib/storage.js');
-    await saveSettings({ apiKey: 'sk-ant-abc', aiModel: 'claude-opus-4-7' });
+    await saveSettings({ apiKey: 'sk-ant-abc', aiModel: 'claude-sonnet-5' });
     expect(mock.storage.local.set).toHaveBeenCalledTimes(1);
     expect(mock.storage.local._data['apiKey']).toBe('sk-ant-abc');
-    expect(mock.storage.local._data['aiModel']).toBe('claude-opus-4-7');
+    expect(mock.storage.local._data['aiModel']).toBe('claude-sonnet-5');
     // sync には書き込まれていないこと（F-001 / 非機能 セキュリティ要件）
     expect(mock.storage.sync.set).not.toHaveBeenCalled();
     expect(mock.storage.sync._data).toEqual({});
@@ -75,10 +75,18 @@ describe('lib/storage', () => {
     expect(s.aiModel).toBe('claude-haiku-4-5');
   });
 
+  it('loadSettings: 一覧から外したモデル（Sonnet 4.6 / Opus 4.7）が保存されていた場合はデフォルトにフォールバック', async () => {
+    const { loadSettings } = await import('../src/lib/storage.js');
+    for (const removed of ['claude-sonnet-4-6', 'claude-opus-4-7']) {
+      mock.storage.local._data['aiModel'] = removed;
+      expect((await loadSettings()).aiModel).toBe('claude-haiku-4-5');
+    }
+  });
+
   it('loadSettings: aiModel が有効な許可リスト内の値の場合はそのまま返す', async () => {
-    mock.storage.local._data['aiModel'] = 'claude-sonnet-4-6';
+    mock.storage.local._data['aiModel'] = 'claude-sonnet-5-5';
     const { loadSettings } = await import('../src/lib/storage.js');
     const s = await loadSettings();
-    expect(s.aiModel).toBe('claude-sonnet-4-6');
+    expect(s.aiModel).toBe('claude-sonnet-5-5');
   });
 });

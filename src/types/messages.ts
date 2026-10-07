@@ -1,10 +1,10 @@
 // バックグラウンドサービスワーカーへ送るメッセージ型（discriminated union）
 
-// 利用可能なモデル一覧（Claude 4.x 系の現行エイリアス）
+// 利用可能なモデル一覧（一覧から外したモデルが保存されていた場合は既定値にフォールバックする）
 export const AVAILABLE_MODELS = [
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 - Fast' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 - Balanced' },
-  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 - Most capable' },
+  { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 - Balanced' },
+  { value: 'claude-sonnet-5', label: 'Claude Sonnet 5 - Legacy' },
 ] as const;
 
 /** 利用可能なモデル ID のユニオン型 */

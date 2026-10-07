@@ -80,7 +80,7 @@ export async function callClaudeAPI(payload: ClaudePayload): Promise<ClaudeRespo
     throw new Error(errorMessage);
   }
 
-  let data: { content: Array<{ type: string; text: string }> };
+  let data: { content?: Array<{ type: string; text?: string }>; stop_reason?: string };
   try {
     data = await response.json() as typeof data;
   } catch (err) {
@@ -89,12 +89,21 @@ export async function callClaudeAPI(payload: ClaudePayload): Promise<ClaudeRespo
     throw new Error('API error: Failed to parse response from the Anthropic API.');
   }
 
-  const firstContent = data.content?.[0];
-  if (!firstContent || firstContent.type !== 'text') {
+  // 安全分類器による辞退は HTTP 200 / stop_reason: "refusal" で返る（Sonnet 5 / 5.5）
+  if (data.stop_reason === 'refusal') {
+    throw new Error('Request declined: The model declined to answer this content. Try another model in Settings.');
+  }
+
+  // Sonnet 5 / 5.5 は既定で思考ブロックを先頭に返すことがあるため、位置ではなく type で本文を取り出す
+  const text = (data.content ?? [])
+    .filter((block) => block.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text)
+    .join('');
+  if (!text) {
     throw new Error('API error: Unexpected response format from the Anthropic API.');
   }
 
-  return { text: firstContent.text };
+  return { text };
 }
 
 /** デフォルトモデル */

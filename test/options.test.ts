@@ -71,13 +71,13 @@ describe('options ページ', () => {
     const inp = document.getElementById('apiKey') as HTMLInputElement;
     const select = document.getElementById('aiModel') as HTMLSelectElement;
     inp.value = 'sk-ant-newkey-123';
-    select.value = 'claude-sonnet-4-6';
+    select.value = 'claude-sonnet-5';
 
     (document.getElementById('btnSave') as HTMLButtonElement).click();
 
     expect(mock.storage.local.set).toHaveBeenCalled();
     expect(mock.storage.local._data['apiKey']).toBe('sk-ant-newkey-123');
-    expect(mock.storage.local._data['aiModel']).toBe('claude-sonnet-4-6');
+    expect(mock.storage.local._data['aiModel']).toBe('claude-sonnet-5');
     expect(mock.storage.sync.set).not.toHaveBeenCalled();
   });
 
@@ -140,11 +140,11 @@ describe('options ページ', () => {
   });
 
   it('保存済みモデルが select に反映される', async () => {
-    mock.storage.local._data['aiModel'] = 'claude-opus-4-7';
+    mock.storage.local._data['aiModel'] = 'claude-sonnet-5-5';
     await import('../src/options/options.js');
     // chrome.storage.local.get のコールバックが同期的に実行されるため即時反映
     const select = document.getElementById('aiModel') as HTMLSelectElement;
-    expect(select.value).toBe('claude-opus-4-7');
+    expect(select.value).toBe('claude-sonnet-5-5');
   });
 });
 
@@ -160,7 +160,7 @@ describe('options ページ: chrome.storage.onChanged 同期', () => {
       <span id="apiKeyMask" class="api-key-mask"></span>
       <select id="aiModel">
         <option value="claude-haiku-4-5">Haiku</option>
-        <option value="claude-sonnet-4-6">Sonnet</option>
+        <option value="claude-sonnet-5-5">Sonnet</option>
       </select>
       <select id="outputLanguage">
         <option value="en">English</option>
@@ -228,10 +228,10 @@ describe('options ページ: chrome.storage.onChanged 同期', () => {
 
     // 別タブの Options で aiModel を変更したことをシミュレート
     mock.storage.onChanged._trigger(
-      { aiModel: { newValue: 'claude-sonnet-4-6', oldValue: 'claude-haiku-4-5' } },
+      { aiModel: { newValue: 'claude-sonnet-5-5', oldValue: 'claude-haiku-4-5' } },
       'local',
     );
-    expect(sel.value).toBe('claude-sonnet-4-6');
+    expect(sel.value).toBe('claude-sonnet-5-5');
   });
 
   it('storage.onChanged で aiModel の area="sync" は無視される', async () => {
@@ -240,7 +240,7 @@ describe('options ページ: chrome.storage.onChanged 同期', () => {
     const sel = document.getElementById('aiModel') as HTMLSelectElement;
 
     mock.storage.onChanged._trigger(
-      { aiModel: { newValue: 'claude-sonnet-4-6', oldValue: 'claude-haiku-4-5' } },
+      { aiModel: { newValue: 'claude-sonnet-5-5', oldValue: 'claude-haiku-4-5' } },
       'sync',
     );
     expect(sel.value).toBe('claude-haiku-4-5');
