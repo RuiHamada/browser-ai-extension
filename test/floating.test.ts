@@ -80,16 +80,19 @@ async function advanceDebounce(): Promise<void> {
 describe('フローティング Explain ボタン（F-501/F-502）', () => {
   it('選択確定後に解説を自動表示し、同じ選択の再評価では再送しない', async () => {
     let resolveExplain!: (value: { text: string }) => void;
-    mock.runtime.sendMessage.mockImplementation(() => new Promise((resolve) => { resolveExplain = resolve; }));
+    mock.runtime.sendMessage.mockImplementation((msg: unknown) => {
+      if ((msg as { type: string }).type === 'CHAT') return new Promise((resolve) => { resolveExplain = resolve; });
+      return Promise.resolve({ ok: true });
+    });
     mockSelection('selected text here');
     document.dispatchEvent(new Event('selectionchange'));
     await advanceDebounce();
 
-    // デバウンス後、追加の待ちなしで送信される
+    // デバウンス後、追加の待ちなしで送信される（Side Panel を開く OPEN_SIDE_PANEL も同時に送る）
     const popup = document.getElementById('browser-ai-floating-host')?.shadowRoot?.getElementById('explanation');
     expect(popup?.textContent).toBe('解説を生成中…');
-    expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(1);
-    expect(mock.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'CHAT' }));
+    expect(mock.runtime.sendMessage.mock.calls.filter((c) => (c[0] as { type?: string })?.type === 'CHAT')).toHaveLength(1);
+    expect(mock.runtime.sendMessage).toHaveBeenCalledWith({ type: 'OPEN_SIDE_PANEL' });
 
     resolveExplain({ text: 'A concise explanation.' });
     await Promise.resolve();
@@ -122,9 +125,13 @@ describe('フローティング Explain ボタン（F-501/F-502）', () => {
 
   it('前の選択の回答が遅れても現在のポップアップを上書きしない', async () => {
     let resolveFirst!: (value: { text: string }) => void;
-    mock.runtime.sendMessage
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
-      .mockResolvedValue({ text: 'New explanation.' });
+    let chatCalls = 0;
+    mock.runtime.sendMessage.mockImplementation((msg: unknown) => {
+      if ((msg as { type: string }).type !== 'CHAT') return Promise.resolve({ ok: true });
+      // 最初の CHAT だけ回答を保留し、2 回目以降は即座に返す
+      if (++chatCalls === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+      return Promise.resolve({ text: 'New explanation.' });
+    });
 
     mockSelection('first selection');
     document.dispatchEvent(new Event('selectionchange'));

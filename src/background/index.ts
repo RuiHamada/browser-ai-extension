@@ -185,7 +185,8 @@ async function handleMessage(
 
     case 'FLOATING_EXPLAIN_RESULT': {
       // ポップアップの自動解説が完了 → Side Panel の Chat に往復として投稿する。
-      // Side Panel が閉じていれば直近 1 件として保持し、開いたときに流す（Side Panel は開かない）。
+      // Side Panel は content が自動解説の開始時に OPEN_SIDE_PANEL で開いている。この時点ではユーザー操作が
+      // 切れていて sidePanel.open() を呼べないため、ここでは開かず、届かなければ直近 1 件として保持して開いたときに流す。
       const delivered = await deliverToSidePanel(
         sender.tab?.id,
         { type: 'EXPLAIN_RESULT', selectionText: message.selectionText, explanation: message.explanation },

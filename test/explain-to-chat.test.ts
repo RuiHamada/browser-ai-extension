@@ -78,6 +78,18 @@ describe('content: ポップアップ解説の Chat 投稿と Explain ボタン�
     ]);
   });
 
+  it('自動解説の開始時に、結果を待たず Explain ボタンと同じく Side Panel を開く（OPEN_SIDE_PANEL）', async () => {
+    // CHAT の回答を返さないままにする: 回答前に OPEN_SIDE_PANEL が送られていること（ユーザー操作の有効期間内に開く）
+    mock.runtime.sendMessage.mockImplementation((msg: unknown) => {
+      if ((msg as { type: string }).type === 'CHAT') return new Promise(() => {});
+      return Promise.resolve({ ok: true });
+    });
+    await selectAndSettle('opening text');
+
+    const types = mock.runtime.sendMessage.mock.calls.map((c) => (c[0] as { type: string }).type);
+    expect(types).toEqual(['OPEN_SIDE_PANEL', 'CHAT']);
+  });
+
   it('自動解説が失敗したら FLOATING_EXPLAIN_RESULT は送らない', async () => {
     mock.runtime.sendMessage.mockResolvedValue({ error: 'API error' });
     await selectAndSettle('some text');
@@ -87,10 +99,14 @@ describe('content: ポップアップ解説の Chat 投稿と Explain ボタン�
 
   it('回答が返る前に別の選択が始まった場合、古い回答は Chat に投稿しない', async () => {
     let resolveFirst!: (v: unknown) => void;
-    mock.runtime.sendMessage.mockImplementationOnce(() => new Promise((r) => { resolveFirst = r; }));
+    let chatCalls = 0;
+    mock.runtime.sendMessage.mockImplementation((msg: unknown) => {
+      if ((msg as { type: string }).type !== 'CHAT') return Promise.resolve({ ok: true });
+      // 最初の CHAT だけ回答を保留する
+      if (++chatCalls === 1) return new Promise((r) => { resolveFirst = r; });
+      return Promise.resolve({ text: 'Second.' });
+    });
     await selectAndSettle('first selection');
-
-    mock.runtime.sendMessage.mockResolvedValue({ text: 'Second.' });
     await selectAndSettle('second selection');
 
     resolveFirst({ text: 'First (late).' });
@@ -109,7 +125,8 @@ describe('content: ポップアップ解説の Chat 投稿と Explain ボタン�
     expect(callsOf('FLOATING_EXPLAIN_REQUEST')).toEqual([
       { type: 'FLOATING_EXPLAIN_REQUEST', selectionText: 'explained text', explanation: 'Done explanation.' },
     ]);
-    expect(callsOf('OPEN_SIDE_PANEL')).toHaveLength(0);
+    // OPEN_SIDE_PANEL は自動解説の開始時の 1 回だけ（Explain 押下では解説つきリクエストが Side Panel を開く）
+    expect(callsOf('OPEN_SIDE_PANEL')).toHaveLength(1);
   });
 
   it('生成中に Explain を押すと Side Panel を開くだけにし、完了後は FLOATING_EXPLAIN_RESULT で届ける', async () => {
@@ -120,9 +137,10 @@ describe('content: ポップアップ解説の Chat 投稿と Explain ボタン�
     });
     await selectAndSettle('pending text');
 
+    expect(callsOf('OPEN_SIDE_PANEL')).toHaveLength(1); // 自動解説の開始時
     getExplainBtn().click();
     await flush();
-    expect(callsOf('OPEN_SIDE_PANEL')).toHaveLength(1);
+    expect(callsOf('OPEN_SIDE_PANEL')).toHaveLength(2); // Explain 押下で改めて開く
     expect(callsOf('FLOATING_EXPLAIN_REQUEST')).toHaveLength(0);
 
     resolveChat({ text: 'Late explanation.' });
@@ -145,7 +163,7 @@ describe('content: ポップアップ解説の Chat 投稿と Explain ボタン�
 
     getExplainBtn().click();
     await flush();
-    expect(callsOf('OPEN_SIDE_PANEL')).toHaveLength(1);
+    expect(callsOf('OPEN_SIDE_PANEL')).toHaveLength(2); // 自動解説の開始時 + Explain 押下
 
     rejectChat(new Error('network down'));
     await flush();

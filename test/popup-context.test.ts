@@ -14,6 +14,13 @@ function selectText(node: Node, start: number, end: number): void {
   window.getSelection()!.addRange(range);
 }
 
+/** 自動解説で送られた CHAT メッセージ（Side Panel を開く OPEN_SIDE_PANEL も同時に送られるため型で選ぶ） */
+function sentChatMessage(): { userMessage: string; useShortPrompt: boolean } {
+  const call = mock.runtime.sendMessage.mock.calls.find((c) => (c[0] as { type?: string })?.type === 'CHAT');
+  if (!call) throw new Error('CHAT メッセージが送られていない');
+  return call[0] as { userMessage: string; useShortPrompt: boolean };
+}
+
 beforeEach(async () => {
   mock = installChromeMock();
   document.body.innerHTML = '<article><p id="passage">Before the selection, <span>While the most demanding projects still call for Astra</span>, work happens at different scales afterward.</p></article>';
@@ -44,7 +51,7 @@ describe('選択位置の自動解説', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    const message = mock.runtime.sendMessage.mock.calls[0]?.[0] as { userMessage: string };
+    const message = sentChatMessage();
     expect(message.userMessage).toContain('Page context');
     expect(message.userMessage).toContain('<before>\nBefore the selection,\n</before>');
     expect(message.userMessage).toContain('<selection>\nWhile the most demanding projects still call for Astra\n</selection>');
@@ -67,7 +74,7 @@ describe('選択位置の自動解説', () => {
     vi.advanceTimersByTime(230);
     await Promise.resolve();
 
-    const message = mock.runtime.sendMessage.mock.calls[0]?.[0] as { userMessage: string; useShortPrompt: boolean };
+    const message = sentChatMessage();
     expect(message.useShortPrompt).toBe(true);
     expect(message.userMessage).toContain('<selection>\nbreak\n</selection>');
     expect(message.userMessage).toContain('<before>\nShe took a\n</before>');

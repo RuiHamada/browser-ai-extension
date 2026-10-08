@@ -1,6 +1,6 @@
 // コンテンツスクリプト: DOM抽出と選択テキスト取得（F-003, F-004）
 // F-501 / F-502 / F-503: フローティング Explain ボタンの統合
-// 選択時の自動解説（ポップアップ）を Side Panel の Chat にも投稿する
+// 選択時の自動解説（ポップアップ）は開始時に Side Panel を開き、結果を Side Panel の Chat にも投稿する
 
 import type { BackgroundMessage, ContentMessage } from '../types/messages.js';
 import { extractPageContent } from './extract.js';
@@ -55,7 +55,7 @@ function buildExplainMessage(text: string, context: SelectionContext): Backgroun
   };
 }
 
-// 選択が確定したらその場のポップアップで自動解説し、結果は Side Panel の Chat にも投稿する。
+// 選択が確定したらその場のポップアップで自動解説し、Explain ボタンと同じく Side Panel を開いて結果を Chat にも投稿する。
 // Explain ボタンは Side Panel を開く。解説済みなら Side Panel で解説をやり直さない（二重投稿・二重 API 呼び出しの防止）。
 initFloatingButton(() => {
   const selectedText = window.getSelection()?.toString() ?? '';
@@ -68,7 +68,7 @@ initFloatingButton(() => {
     return;
   }
   if (state?.status === 'pending') {
-    // 生成中: Side Panel を開くだけにして、完了時の投稿に任せる
+    // 生成中: Side Panel は開始時に開いているはずだが、クリックは確実なユーザー操作なので改めて開き、完了時の投稿に任せる
     state.panelRequested = true;
     notifyBackground({ type: 'OPEN_SIDE_PANEL' });
     return;
@@ -78,6 +78,9 @@ initFloatingButton(() => {
 }, async (selectedText, context) => {
   const state: AutoExplainState = { text: selectedText, status: 'pending' };
   autoExplainState = state;
+  // Explain ボタンと同じく Side Panel を開く。sidePanel.open() はユーザー操作（選択を終えたマウスアップ等）から
+  // 数秒以内の呼び出ししか許されないため、解説の完了を待たずに開始時点で開く（結果は完了後に Chat へ届く）
+  notifyBackground({ type: 'OPEN_SIDE_PANEL' });
   const text = selectedText.trim().slice(0, AUTO_EXPLAIN_MAX_CHARS);
   try {
     const response = await chrome.runtime.sendMessage(buildExplainMessage(text, context)) as
