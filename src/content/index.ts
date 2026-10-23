@@ -1,10 +1,10 @@
 // コンテンツスクリプト: DOM抽出と選択テキスト取得（F-003, F-004）
 // F-501 / F-502 / F-503: フローティング Explain ボタンの統合
-// 選択時の自動解説（ポップアップ）は開始時に Side Panel を開き、結果を Side Panel の Chat にも投稿する
+// 選択時の自動解説は開始時に Side Panel を開き、結果を Side Panel の Chat にも投稿する
 
 import type { BackgroundMessage, ContentMessage } from '../types/messages.js';
 import { extractPageContent } from './extract.js';
-import { initFloatingButton } from './floating.js';
+import { initFloatingButton, setFloatingEnabled } from './floating.js';
 import type { SelectionContext } from './selection-context.js';
 
 /** 自動解説に渡す選択テキストの上限文字数 */
@@ -25,16 +25,54 @@ interface AutoExplainState {
 }
 
 let autoExplainState: AutoExplainState | null = null;
+let enabled = false;
+let enabledRevision = 0;
+let contextInvalidated = false;
+let disposeFloating: (() => void) | undefined;
+
+/** 無効化された旧コンテキストだけを停止し、通常の通信/API エラーは隠さない。 */
+function handleInvalidatedContext(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!message.includes('Extension context invalidated')) return false;
+  contextInvalidated = true;
+  enabled = false;
+  autoExplainState = null;
+  disposeFloating?.();
+  return true;
+}
+setFloatingEnabled(false);
+function applyEnabled(value: unknown): void {
+  enabled = !contextInvalidated && value !== false;
+  setFloatingEnabled(enabled);
+  if (!enabled) autoExplainState = null;
+}
+// 初回読み込み中に発生した設定変更を古い読み込み結果で上書きしない。
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && 'enabled' in changes) {
+    enabledRevision++;
+    applyEnabled(changes['enabled']?.newValue);
+  }
+});
+chrome.storage.local.get(['enabled'], (data) => {
+  if (enabledRevision === 0) applyEnabled(data['enabled']);
+});
 
 /** 応答を待たない background への送信（失敗はログのみ） */
-function notifyBackground(message: BackgroundMessage): void {
-  chrome.runtime.sendMessage(message).catch((e: unknown) => {
-    console.error(`[content] ${message.type} 送信エラー:`, e);
-  });
+async function notifyBackground(message: BackgroundMessage): Promise<void> {
+  if (!enabled) return;
+  try {
+    // sendMessage 自体の同期例外と Promise の拒否の両方を捕捉する。
+    const response = await chrome.runtime.sendMessage(message) as { error?: string } | undefined;
+    if (response?.error) throw new Error(response.error);
+  } catch (e: unknown) {
+    if (!handleInvalidatedContext(e)) {
+      console.error(`[content] ${message.type} 送信エラー:`, e);
+    }
+  }
 }
 
 /**
- * ポップアップ用の CHAT メッセージを組み立てる。
+ * 自動解説用の CHAT メッセージを組み立てる。
  * 指示文と構成は Side Panel の Explain selection（sidepanel/chat.ts）と同じにする。
  * 指示を足すと応答が長くなり、その分だけ表示が遅れるため。前後の文章だけ追加で渡す。
  */
@@ -55,9 +93,10 @@ function buildExplainMessage(text: string, context: SelectionContext): Backgroun
   };
 }
 
-// 選択が確定したらその場のポップアップで自動解説し、Explain ボタンと同じく Side Panel を開いて結果を Chat にも投稿する。
+// 選択が確定したら自動解説し、Explain ボタンと同じく Side Panel を開いて結果を Chat にも投稿する。
 // Explain ボタンは Side Panel を開く。解説済みなら Side Panel で解説をやり直さない（二重投稿・二重 API 呼び出しの防止）。
-initFloatingButton(() => {
+disposeFloating = initFloatingButton(() => {
+  if (!enabled) return;
   const selectedText = window.getSelection()?.toString() ?? '';
   if (!selectedText.trim()) return;
   const state = autoExplainState?.text === selectedText ? autoExplainState : null;
@@ -76,11 +115,13 @@ initFloatingButton(() => {
   // 自動解説が失敗した / 走っていない: 従来どおり Side Panel 側で解説を実行する
   notifyBackground({ type: 'FLOATING_EXPLAIN_REQUEST', selectionText: selectedText });
 }, async (selectedText, context) => {
+  if (!enabled) return '';
   const state: AutoExplainState = { text: selectedText, status: 'pending' };
   autoExplainState = state;
   // Explain ボタンと同じく Side Panel を開く。sidePanel.open() はユーザー操作（選択を終えたマウスアップ等）から
   // 数秒以内の呼び出ししか許されないため、解説の完了を待たずに開始時点で開く（結果は完了後に Chat へ届く）
   notifyBackground({ type: 'OPEN_SIDE_PANEL' });
+  if (!enabled) return '';
   const text = selectedText.trim().slice(0, AUTO_EXPLAIN_MAX_CHARS);
   try {
     const response = await chrome.runtime.sendMessage(buildExplainMessage(text, context)) as
@@ -90,12 +131,13 @@ initFloatingButton(() => {
     if (!response?.text) throw new Error('解説を取得できませんでした。');
     state.status = 'done';
     state.explanation = response.text;
-    // 次の選択が始まっていたら（ポップアップでも破棄される）Chat にも投稿しない
+    // 次の選択が始まっていたらChat にも投稿しない
     if (autoExplainState === state) {
       notifyBackground({ type: 'FLOATING_EXPLAIN_RESULT', selectionText: text, explanation: response.text });
     }
     return response.text;
   } catch (e) {
+    if (handleInvalidatedContext(e)) return '';
     state.status = 'error';
     if (autoExplainState === state && state.panelRequested) {
       // 生成中に Explain が押されて Side Panel は開いているので、そちらで解説をやり直す
@@ -106,6 +148,10 @@ initFloatingButton(() => {
 });
 
 chrome.runtime.onMessage.addListener((message: ContentMessage, _sender, sendResponse) => {
+  if (!enabled) {
+    sendResponse({ error: 'Browser AI is Off. Turn it on to continue.' });
+    return true;
+  }
   switch (message.type) {
     case 'GET_PAGE_CONTENT': {
       // ページ本文を抽出して返す（F-003, F-012）

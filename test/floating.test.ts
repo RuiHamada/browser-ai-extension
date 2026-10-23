@@ -78,7 +78,7 @@ async function advanceDebounce(): Promise<void> {
 }
 
 describe('フローティング Explain ボタン（F-501/F-502）', () => {
-  it('選択確定後に解説を自動表示し、同じ選択の再評価では再送しない', async () => {
+  it('選択確定後にサイドパネルへ解説を送り、同じ選択の再評価では再送しない', async () => {
     let resolveExplain!: (value: { text: string }) => void;
     mock.runtime.sendMessage.mockImplementation((msg: unknown) => {
       if ((msg as { type: string }).type === 'CHAT') return new Promise((resolve) => { resolveExplain = resolve; });
@@ -90,7 +90,7 @@ describe('フローティング Explain ボタン（F-501/F-502）', () => {
 
     // デバウンス後、追加の待ちなしで送信される（Side Panel を開く OPEN_SIDE_PANEL も同時に送る）
     const popup = document.getElementById('browser-ai-floating-host')?.shadowRoot?.getElementById('explanation');
-    expect(popup?.textContent).toBe('解説を生成中…');
+    expect(popup).toBeNull();
     expect(mock.runtime.sendMessage.mock.calls.filter((c) => (c[0] as { type?: string })?.type === 'CHAT')).toHaveLength(1);
     expect(mock.runtime.sendMessage).toHaveBeenCalledWith({ type: 'OPEN_SIDE_PANEL' });
 
@@ -98,7 +98,7 @@ describe('フローティング Explain ボタン（F-501/F-502）', () => {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
-    expect(popup?.textContent).toBe('A concise explanation.');
+    expect(mock.runtime.sendMessage).toHaveBeenCalledWith({ type: 'FLOATING_EXPLAIN_RESULT', selectionText: 'selected text here', explanation: 'A concise explanation.' });
 
     document.dispatchEvent(new Event('scroll'));
     vi.advanceTimersByTime(100);
@@ -123,7 +123,7 @@ describe('フローティング Explain ボタン（F-501/F-502）', () => {
     expect(mock.runtime.sendMessage.mock.calls.filter((c) => (c[0] as { type?: string })?.type === 'CHAT')).toHaveLength(1);
   });
 
-  it('前の選択の回答が遅れても現在のポップアップを上書きしない', async () => {
+  it('前の選択の回答が遅れてもサイドパネルに送らない', async () => {
     let resolveFirst!: (value: { text: string }) => void;
     let chatCalls = 0;
     mock.runtime.sendMessage.mockImplementation((msg: unknown) => {
@@ -147,11 +147,13 @@ describe('フローティング Explain ボタン（F-501/F-502）', () => {
     await Promise.resolve();
 
     const popup = document.getElementById('browser-ai-floating-host')?.shadowRoot?.getElementById('explanation');
-    expect(popup?.textContent).toBe('New explanation.');
+    expect(popup).toBeNull();
+    expect(mock.runtime.sendMessage.mock.calls.filter((c) => c[0].type === 'FLOATING_EXPLAIN_RESULT').map((c) => c[0].explanation)).toEqual(['New explanation.']);
     resolveFirst({ text: 'Old explanation.' });
     await Promise.resolve();
     await Promise.resolve();
-    expect(popup?.textContent).toBe('New explanation.');
+    expect(popup).toBeNull();
+    expect(mock.runtime.sendMessage.mock.calls.filter((c) => c[0].type === 'FLOATING_EXPLAIN_RESULT').map((c) => c[0].explanation)).toEqual(['New explanation.']);
   });
 
   it('2 文字未満の選択ではホスト要素が表示されない', async () => {
@@ -282,4 +284,83 @@ describe('フローティング Explain ボタン（F-501/F-502）', () => {
     const hosts = document.querySelectorAll('#browser-ai-floating-host');
     expect(hosts.length).toBe(1);
   });
+});
+
+it('Off は待機中の選択に即時反映され、On に戻すと再開する', async () => {
+  mock.runtime.sendMessage.mockResolvedValue({ text: 'result' });
+  mockSelection('selected text');
+  document.dispatchEvent(new Event('selectionchange'));
+  mock.storage.onChanged._trigger({ enabled: { newValue: false } }, 'local');
+  await advanceDebounce();
+  expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
+  mock.storage.onChanged._trigger({ enabled: { newValue: true } }, 'local');
+  document.dispatchEvent(new Event('selectionchange'));
+  await advanceDebounce();
+  expect(mock.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'CHAT' }));
+  mock.storage.onChanged._trigger({ enabled: { newValue: false } }, 'local');
+  expect(document.getElementById('browser-ai-floating-host')?.style.display).toBe('none');
+});
+
+it('Off にする前の応答は On に戻しても投稿しない', async () => {
+  let finish!: (value: { text: string }) => void;
+  mock.runtime.sendMessage.mockImplementation((msg) => msg.type === 'CHAT'
+    ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve({ ok: true }));
+  mockSelection('selected text');
+  document.dispatchEvent(new Event('selectionchange'));
+  await advanceDebounce();
+  mock.storage.onChanged._trigger({ enabled: { newValue: false } }, 'local');
+  mock.storage.onChanged._trigger({ enabled: { newValue: true } }, 'local');
+  finish({ text: 'stale response' });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(mock.runtime.sendMessage.mock.calls.filter((c) => c[0].type === 'FLOATING_EXPLAIN_RESULT')).toHaveLength(0);
+});
+
+for (const failure of ['sync-open', 'async-open', 'async-chat']) {
+  it(`コンテキスト無効化で旧スクリプトを停止する: ${failure}`, async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mock.runtime.sendMessage.mockImplementation((message) => {
+      if (message.type === 'OPEN_SIDE_PANEL' && failure === 'sync-open') {
+        throw new Error('Extension context invalidated.');
+      }
+      if ((message.type === 'OPEN_SIDE_PANEL' && failure === 'async-open') ||
+          (message.type === 'CHAT' && failure === 'async-chat')) {
+        return Promise.reject(new Error('Extension context invalidated.'));
+      }
+      return Promise.resolve({ text: 'result' });
+    });
+    mockSelection('selected text');
+    document.dispatchEvent(new Event('selectionchange'));
+    await advanceDebounce();
+    await Promise.resolve();
+    expect(errorLog).not.toHaveBeenCalled();
+    expect(document.getElementById('browser-ai-floating-host')).toBeNull();
+    const calls = mock.runtime.sendMessage.mock.calls.length;
+    mock.storage.onChanged._trigger({ enabled: { newValue: true } }, 'local');
+    document.dispatchEvent(new Event('mouseup'));
+    document.dispatchEvent(new Event('scroll'));
+    await advanceDebounce();
+    expect(mock.runtime.sendMessage).toHaveBeenCalledTimes(calls);
+  });
+}
+
+it('通常の通信エラーは無効化と混同せず記録する', async () => {
+  const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+  mock.runtime.sendMessage.mockRejectedValue(new Error('Network error'));
+  mockSelection('selected text');
+  document.dispatchEvent(new Event('selectionchange'));
+  await advanceDebounce();
+  await Promise.resolve();
+  expect(errorLog).toHaveBeenCalled();
+  expect(document.getElementById('browser-ai-floating-host')).not.toBeNull();
+});
+
+it('選択確定の mouseup 内でタイマーを待たずにパネルを要求する', () => {
+  mock.runtime.sendMessage.mockResolvedValue({ text: 'result' });
+  document.dispatchEvent(new MouseEvent('mousedown'));
+  mockSelection('selected text');
+  document.dispatchEvent(new Event('selectionchange'));
+  expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
+  document.dispatchEvent(new MouseEvent('mouseup'));
+  expect(mock.runtime.sendMessage).toHaveBeenCalledWith({ type: 'OPEN_SIDE_PANEL' });
 });

@@ -19,7 +19,7 @@ describe('lib/storage', () => {
     const { loadSettings } = await import('../src/lib/storage.js');
     const settings = await loadSettings();
     expect(settings.apiKey).toBe('');
-    expect(settings.aiModel).toBe('claude-haiku-4-5');
+    expect(settings.aiModel).toBe('claude-haiku-5-5');
   });
 
   it('loadSettings: 保存済みの値が読み出される', async () => {
@@ -65,21 +65,21 @@ describe('lib/storage', () => {
     const { loadSettings } = await import('../src/lib/storage.js');
     const s = await loadSettings();
     expect(s.apiKey).toBe('');
-    expect(s.aiModel).toBe('claude-haiku-4-5');
+    expect(s.aiModel).toBe('claude-haiku-5-5');
   });
 
   it('loadSettings: aiModel が許可リスト外の文字列の場合はデフォルトにフォールバック', async () => {
     mock.storage.local._data['aiModel'] = 'claude-unknown-model-99';
     const { loadSettings } = await import('../src/lib/storage.js');
     const s = await loadSettings();
-    expect(s.aiModel).toBe('claude-haiku-4-5');
+    expect(s.aiModel).toBe('claude-haiku-5-5');
   });
 
   it('loadSettings: 一覧から外したモデル（Sonnet 4.6 / Opus 4.7）が保存されていた場合はデフォルトにフォールバック', async () => {
     const { loadSettings } = await import('../src/lib/storage.js');
     for (const removed of ['claude-sonnet-4-6', 'claude-opus-4-7']) {
       mock.storage.local._data['aiModel'] = removed;
-      expect((await loadSettings()).aiModel).toBe('claude-haiku-4-5');
+      expect((await loadSettings()).aiModel).toBe('claude-haiku-5-5');
     }
   });
 
@@ -89,4 +89,11 @@ describe('lib/storage', () => {
     const s = await loadSettings();
     expect(s.aiModel).toBe('claude-sonnet-5-5');
   });
+});
+
+it('enabled は既定で On、Off を保存すると再読み込みでも維持される', async () => {
+  const { loadSettings, saveSettings } = await import('../src/lib/storage.js');
+  expect((await loadSettings()).enabled).toBe(true);
+  await saveSettings({ enabled: false, aiModel: 'claude-haiku-5-5' });
+  expect(await loadSettings()).toMatchObject({ enabled: false, aiModel: 'claude-haiku-5-5' });
 });

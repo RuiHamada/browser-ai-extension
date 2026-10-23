@@ -6,8 +6,16 @@ import { saveSettings, loadSettings } from '../lib/storage.js';
 import { callClaudeAPI, getShortExplainSystemPrompt, getChatSystemPromptBase } from '../lib/claude.js';
 import { sanitizeErrorMessage, sanitizeErrorForLog } from '../lib/sanitize.js';
 
-// アイコンクリックでサイドパネルを開く設定
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+// アイコンから On / Off スイッチを含むポップアップを開く。
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+
+// open() より前に非同期ストレージ取得を挟まないためのキャッシュ。
+// service worker の起動ごとに復元し、変更イベントで更新する。
+let panelEnabled = true;
+let enabledRevision = 0;
+chrome.storage.local.get(['enabled'], (data) => {
+  if (enabledRevision === 0) panelEnabled = data['enabled'] !== false;
+});
 
 // 直前に broadcast した URL（同一 URL の重複通知を防ぐ）
 // MV3 service worker は永続しないが、同一起動セッション内での重複防止には有効
@@ -56,6 +64,14 @@ async function deliverToSidePanel(
     return false;
   }
 }
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && 'enabled' in changes) {
+    enabledRevision++;
+    panelEnabled = changes['enabled']?.newValue !== false;
+    if (!panelEnabled) pendingSidePanelAction.clear();
+  }
+});
 
 // タブ変更時にサイドパネルへ通知（F-008: ページ変更検知）
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
@@ -106,6 +122,14 @@ async function handleMessage(
   message: BackgroundMessage,
   sender: chrome.runtime.MessageSender,
 ): Promise<unknown> {
+  if ((message.type === 'OPEN_SIDE_PANEL' || message.type === 'FLOATING_EXPLAIN_REQUEST') && !panelEnabled) {
+    return { error: 'Browser AI is Off. Turn it on to continue.' };
+  }
+  if (['CHAT', 'FLOATING_EXPLAIN_RESULT', 'SIDE_PANEL_READY'].includes(message.type)) {
+    if (!(await loadSettings()).enabled) {
+      return message.type === 'SIDE_PANEL_READY' ? { pending: null } : { error: 'Browser AI is Off. Turn it on to continue.' };
+    }
+  }
   switch (message.type) {
     case 'OPEN_SIDE_PANEL': {
       // サイドパネルを開く（ポップアップ・フローティングボタンからの呼び出し）

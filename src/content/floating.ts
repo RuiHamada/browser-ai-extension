@@ -1,7 +1,6 @@
 // F-501 / F-502 / F-503: フローティング Explain ボタン（Shadow DOM 隔離）
 // テキスト選択時に選択範囲付近に表示し、クリックで Side Panel Explain を起動する
 // F-601 / F-602 / F-603: Speak ボタンの追加（Web Speech API 連携）
-import { renderMarkdown } from '../sidepanel/markdown.js';
 import { getSelectionContext, type SelectionContext } from './selection-context.js';
 
 /** Shadow ホスト要素の ID（重複防止チェックに使用） */
@@ -31,6 +30,16 @@ let lastSelectionText: string | null = null;
 let lastAutoExplainText: string | null = null;
 let explainRequestId = 0;
 let selectingWithPointer = false;
+let enabled = true;
+
+/** Off はタイマー待機中の選択・読み上げにも即時反映する。 */
+export function setFloatingEnabled(value: boolean): void {
+  enabled = value;
+  if (!enabled) {
+    selectingWithPointer = false;
+    hideFloatingButton();
+  }
+}
 
 // Shadow DOM 内のスタイル（ホストページには影響しない）
 const FLOATING_BUTTON_CSS = `
@@ -83,41 +92,6 @@ const FLOATING_BUTTON_CSS = `
     opacity: 0.4;
     cursor: not-allowed;
   }
-  .explanation {
-    display: none;
-    box-sizing: border-box;
-    width: min(360px, calc(100vw - 16px));
-    max-height: min(280px, 50vh);
-    overflow: auto;
-    margin-top: 6px;
-    padding: 12px 14px;
-    border-radius: 8px;
-    background: #202028;
-    color: #fff;
-    font: 14px/1.55 system-ui, sans-serif;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.35);
-    pointer-events: auto;
-  }
-  .explanation > :first-child { margin-top: 0; }
-  .explanation > :last-child { margin-bottom: 0; }
-  .explanation p, .explanation ul, .explanation ol, .explanation pre { margin: 0 0 10px; }
-  .explanation h1, .explanation h2, .explanation h3 {
-    margin: 12px 0 6px;
-    color: #fff;
-    font-weight: 700;
-    line-height: 1.35;
-  }
-  .explanation h1 { font-size: 17px; }
-  .explanation h2 { font-size: 15px; }
-  .explanation h3 { font-size: 14px; }
-  .explanation ul, .explanation ol { padding-left: 22px; }
-  .explanation li { margin: 3px 0; }
-  .explanation a { color: #9cc9ff; }
-  .explanation code { padding: 1px 3px; border-radius: 3px; background: #343440; }
-  .explanation pre { overflow-x: auto; padding: 8px; border-radius: 4px; background: #16161d; }
-  .explanation pre code { padding: 0; background: none; }
 `;
 
 // ----------------------------------------------------------------
@@ -189,13 +163,6 @@ function getOrCreateHost(): FloatingHost {
 
   container.appendChild(speakBtn);
 
-  const explanation = document.createElement('div');
-  explanation.className = 'explanation';
-  explanation.id = 'explanation';
-  explanation.setAttribute('role', 'status');
-  explanation.setAttribute('aria-live', 'polite');
-  shadow.appendChild(explanation);
-
   document.body.appendChild(host);
 
   return { host, shadow, explainBtn, speakBtn };
@@ -219,16 +186,6 @@ function hideFloatingButton(): void {
   lastSelectionText = null;
 }
 
-function setExplanation(text: string, markdown = false): void {
-  const host = document.getElementById(FLOATING_HOST_ID);
-  const explanation = host?.shadowRoot?.getElementById('explanation') as HTMLDivElement | null;
-  if (!explanation) return;
-  explanation.replaceChildren();
-  if (markdown) renderMarkdown(explanation, text);
-  else explanation.textContent = text;
-  explanation.style.display = text ? 'block' : 'none';
-}
-
 /** 選択確定のデバウンス後、追加の待ちを入れずに解説を取得する。 */
 function startAutoExplain(
   text: string,
@@ -238,13 +195,9 @@ function startAutoExplain(
   if (text === lastAutoExplainText) return;
   lastAutoExplainText = text;
   const requestId = ++explainRequestId;
-  setExplanation('解説を生成中…');
-  void onAutoExplain(text, context).then((result) => {
-    if (requestId === explainRequestId) setExplanation(result, true);
-  }).catch((error: unknown) => {
+  void onAutoExplain(text, context).catch((error: unknown) => {
     if (requestId !== explainRequestId) return;
     console.error('[floating] 解説の取得エラー:', error);
-    setExplanation(error instanceof Error ? error.message : '解説を取得できませんでした。');
   });
 }
 
@@ -266,7 +219,7 @@ function showFloatingButton(
   explainBtn.parentNode!.replaceChild(newExplainBtn, explainBtn);
   newExplainBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    onExplain();
+    if (enabled) onExplain();
   });
 
   // Speak ボタン: クリックリスナーを付け替え
@@ -282,15 +235,15 @@ function showFloatingButton(
     // Speak には raw テキスト（trim 前）を使用する（テキストの厳密性）
     newSpeakBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      handleSpeak(newSpeakBtn, rawSelectionText);
+      if (enabled) handleSpeak(newSpeakBtn, rawSelectionText);
     });
   }
 
   // ビューポートサイズを取得してはみ出しをクランプ
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const btnW = 360; // 解説カードの最大幅
-  const btnH = 320; // ボタンと解説カードの概算高さ
+  const btnW = 180; // ボタン列の概算幅
+  const btnH = 32; // ボタン列の概算高さ
 
   // デフォルト: 選択範囲の右下に配置（8px オフセット）
   let left = rect.right + 8;
@@ -461,6 +414,7 @@ function scheduleSelectionCheck(onExplain: () => void, onAutoExplain: (text: str
  * 現在の選択を評価してフローティングボタンの表示・非表示を更新する。
  */
 function evaluateSelection(onExplain: () => void, onAutoExplain: (text: string, context: SelectionContext) => Promise<string>): void {
+  if (!enabled) return;
   const selection = window.getSelection();
 
   if (!selection || selection.isCollapsed) {
@@ -500,7 +454,6 @@ function evaluateSelection(onExplain: () => void, onAutoExplain: (text: string, 
     lastSelectionText = rawText;
     explainRequestId++;
     lastAutoExplainText = null;
-    setExplanation('');
   }
 
   // Speak には raw text（trim 前）を渡す
@@ -539,7 +492,7 @@ function onScroll(onExplain: () => void, onAutoExplain: (text: string, context: 
 export function initFloatingButton(
   onExplain: () => void,
   onAutoExplain: (text: string, context: SelectionContext) => Promise<string>,
-): void {
+): () => void {
   // 開発時の再注入やテスト時の再初期化で旧リスナーを残さない。
   const initializedDocument = document as Document & { __browserAiFloatingController?: AbortController };
   initializedDocument.__browserAiFloatingController?.abort();
@@ -553,12 +506,18 @@ export function initFloatingButton(
   // mouseup: テキスト選択直後のトリガー（selectionchange が先に来るが念のため補完）
   document.addEventListener('mouseup', () => {
     selectingWithPointer = false;
-    scheduleSelectionCheck(onExplain, onAutoExplain);
+    // ユーザー操作の中で送信する。open() 用の操作判定をタイマーで失わない。
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
+    debounceTimer = null;
+    evaluateSelection(onExplain, onAutoExplain);
   }, { signal });
 
   document.addEventListener('touchend', () => {
     selectingWithPointer = false;
-    scheduleSelectionCheck(onExplain, onAutoExplain);
+    // ユーザー操作の中で送信する。open() 用の操作判定をタイマーで失わない。
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
+    debounceTimer = null;
+    evaluateSelection(onExplain, onAutoExplain);
   }, { signal });
 
   document.addEventListener('touchstart', () => {
@@ -581,7 +540,7 @@ export function initFloatingButton(
   document.addEventListener('keyup', (e) => {
     const selectionKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'];
     if (e.shiftKey || selectionKeys.includes(e.key)) {
-      scheduleSelectionCheck(onExplain, onAutoExplain);
+      evaluateSelection(onExplain, onAutoExplain);
     }
   }, { signal });
 
@@ -596,4 +555,14 @@ export function initFloatingButton(
       hideFloatingButton();
     }
   }, { signal });
+  // 拡張機能の再読み込みで通信不能になった旧スクリプトを停止する。
+  return () => {
+    controller.abort();
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
+    if (scrollUpdateTimer !== null) clearTimeout(scrollUpdateTimer);
+    debounceTimer = null;
+    scrollUpdateTimer = null;
+    setFloatingEnabled(false);
+    document.getElementById(FLOATING_HOST_ID)?.remove();
+  };
 }

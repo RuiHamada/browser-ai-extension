@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 describe('選択位置の自動解説', () => {
-  it('前後の文章と選択範囲を区別して送信し、回答を Markdown として表示する', async () => {
+  it('前後の文章と選択範囲を区別して送信し、回答はページ上に表示せずサイドパネルに送る', async () => {
     mock.runtime.sendMessage.mockResolvedValue({
       text: '## 意味\n**強調**された解説です。',
     });
@@ -58,9 +58,12 @@ describe('選択位置の自動解説', () => {
     expect(message.userMessage).toContain('<after>\n, work happens at different scales afterward.\n</after>');
 
     const popup = document.getElementById('browser-ai-floating-host')?.shadowRoot?.getElementById('explanation');
-    expect(popup?.querySelector('h2')?.textContent).toBe('意味');
-    expect(popup?.querySelector('strong')?.textContent).toBe('強調');
-    expect(popup?.textContent).not.toContain('##');
+    expect(popup).toBeNull();
+    expect(mock.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'FLOATING_EXPLAIN_RESULT',
+      selectionText: selectedNode.textContent,
+      explanation: '## 意味\n**強調**された解説です。',
+    });
   });
 
   it('単語の選択でも文中の前後を渡し、長いページの後半でも文脈を失わない', async () => {

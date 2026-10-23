@@ -9,6 +9,7 @@ let mock: ChromeMock;
 
 function setupDom(): void {
   document.body.innerHTML = `
+    <input id="enabled" type="checkbox"><span id="enabledLabel"></span>
     <button id="openPanel"></button>
     <button id="openOptions"></button>
     <div id="apiKeyWarning" class="warning hidden">
@@ -77,4 +78,19 @@ describe('popup', () => {
     (document.getElementById('linkToOptions') as HTMLAnchorElement).click();
     expect(mock.runtime.openOptionsPage).toHaveBeenCalled();
   });
+});
+
+it('On / Off スイッチが状態を保存し、Off 時はパネル起動を無効化する', async () => {
+  await import('../src/popup/popup.js');
+  await Promise.resolve();
+  const toggle = document.getElementById('enabled') as HTMLInputElement;
+  expect(toggle.checked).toBe(true);
+  toggle.checked = false;
+  toggle.dispatchEvent(new Event('change'));
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(mock.storage.local._data['enabled']).toBe(false);
+  await vi.waitFor(() => expect((document.getElementById('openPanel') as HTMLButtonElement).disabled).toBe(true));
+  expect(document.getElementById('enabledLabel')?.textContent).toBe('Off');
 });

@@ -2,6 +2,7 @@
 
 // 利用可能なモデル一覧（一覧から外したモデルが保存されていた場合は既定値にフォールバックする）
 export const AVAILABLE_MODELS = [
+  { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 - Fast' },
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 - Fast' },
   { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 - Balanced' },
   { value: 'claude-sonnet-5', label: 'Claude Sonnet 5 - Legacy' },
@@ -15,6 +16,8 @@ export type OutputLanguage = 'en' | 'ja';
 
 // 拡張機能の設定
 export interface Settings {
+  /** 拡張機能全体の有効状態 */
+  enabled: boolean;
   apiKey: string;
   /** 利用可能なモデル ID のみ許可（許可リスト外はストレージ読み込み時にフォールバック） */
   aiModel: AiModelId;
@@ -24,8 +27,9 @@ export interface Settings {
 
 // デフォルト設定値
 export const DEFAULT_SETTINGS: Settings = {
+  enabled: true,
   apiKey: '',
-  aiModel: 'claude-haiku-4-5',
+  aiModel: 'claude-haiku-5-5',
   outputLanguage: 'en',
 };
 

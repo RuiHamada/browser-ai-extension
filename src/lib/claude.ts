@@ -33,6 +33,8 @@ export interface ClaudeResponse {
 export async function callClaudeAPI(payload: ClaudePayload): Promise<ClaudeResponse> {
   const settings = await loadSettings();
 
+  if (!settings.enabled) throw new Error('Browser AI is Off. Turn it on to continue.');
+
   // APIキー未設定チェック（F-010）
   if (!settings.apiKey.trim()) {
     throw new Error('API key is not configured. Please set your API key in Settings.');
@@ -107,7 +109,7 @@ export async function callClaudeAPI(payload: ClaudePayload): Promise<ClaudeRespo
 }
 
 /** デフォルトモデル */
-const DEFAULT_MODEL = 'claude-haiku-4-5';
+const DEFAULT_MODEL = 'claude-haiku-5-5';
 
 /** デフォルトシステムプロンプト（言語指定なし汎用） */
 const DEFAULT_SYSTEM =

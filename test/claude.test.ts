@@ -216,3 +216,20 @@ describe('callClaudeAPI', () => {
     expect(body.messages[2]).toEqual({ role: 'user', content: 'follow-up' });
   });
 });
+
+it('Off では fetch を呼ばない', async () => {
+  mock.storage.local._data['enabled'] = false;
+  mock.storage.local._data['apiKey'] = 'sk-ant-test';
+  const { callClaudeAPI } = await import('../src/lib/claude.js');
+  await expect(callClaudeAPI({ prompt: 'test' })).rejects.toThrow('Browser AI is Off');
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('Haiku 5.5 を選ぶと正式なモデル ID で API を呼ぶ', async () => {
+  mock.storage.local._data['apiKey'] = 'sk-ant-test';
+  mock.storage.local._data['aiModel'] = 'claude-haiku-5-5';
+  setupSuccessFetch('result');
+  const { callClaudeAPI } = await import('../src/lib/claude.js');
+  await callClaudeAPI({ prompt: 'test' });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('claude-haiku-5-5');
+});

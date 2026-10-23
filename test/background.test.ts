@@ -44,8 +44,8 @@ function callOnUpdated(
 }
 
 describe('background メッセージルータ', () => {
-  it('起動時に sidePanel.setPanelBehavior を呼ぶ（F-009: アイコンクリックでパネルを開く）', () => {
-    expect(mock.sidePanel.setPanelBehavior).toHaveBeenCalledWith({ openPanelOnActionClick: true });
+  it('起動時に sidePanel.setPanelBehavior を呼ぶ（アイコンクリックで On / Off メニューを使う）', () => {
+    expect(mock.sidePanel.setPanelBehavior).toHaveBeenCalledWith({ openPanelOnActionClick: false });
   });
 
   it('起動時に onMessage.addListener を呼ぶ', () => {
@@ -225,4 +225,28 @@ describe('background メッセージルータ', () => {
 
     globalThis.fetch = origFetch;
   });
+});
+
+it('Off では API・パネル起動・自動解説結果の配信を止め、設定操作は許可する', async () => {
+  mock.storage.local._data['enabled'] = false;
+  mock.storage.onChanged._trigger({ enabled: { newValue: false } }, 'local');
+  for (const message of [
+    { type: 'CHAT', userMessage: 'hello', pageContent: '', history: [] },
+    { type: 'OPEN_SIDE_PANEL' },
+    { type: 'FLOATING_EXPLAIN_REQUEST', selectionText: 'hello' },
+    { type: 'FLOATING_EXPLAIN_RESULT', selectionText: 'hello', explanation: 'result' },
+  ]) expect(await callListener(message, { tab: { id: 1 } })).toHaveProperty('error');
+  expect(mock.sidePanel.open).not.toHaveBeenCalled();
+  expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
+  expect(await callListener({ type: 'SIDE_PANEL_READY' })).toEqual({ pending: null });
+  expect(await callListener({ type: 'SAVE_SETTINGS', settings: { enabled: true } })).toEqual({ ok: true });
+  expect(mock.storage.local._data['enabled']).toBe(true);
+});
+
+it('パネルを開くまでストレージの非同期処理を挟まない', async () => {
+  mock.storage.local.get.mockClear();
+  const result = callListener({ type: 'OPEN_SIDE_PANEL' }, { tab: { id: 42 } });
+  expect(mock.sidePanel.open).toHaveBeenCalledWith({ tabId: 42 });
+  expect(mock.storage.local.get).not.toHaveBeenCalled();
+  await result;
 });

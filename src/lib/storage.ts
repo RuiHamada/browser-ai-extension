@@ -35,8 +35,9 @@ export function validateOutputLanguage(raw: unknown): OutputLanguage {
 /** 設定を chrome.storage.local から読み込む */
 export async function loadSettings(): Promise<Settings> {
   return new Promise((resolve) => {
-    chrome.storage.local.get(['apiKey', 'aiModel', 'outputLanguage'], (data) => {
+    chrome.storage.local.get(['apiKey', 'aiModel', 'outputLanguage', 'enabled'], (data) => {
       resolve({
+        enabled: data['enabled'] !== false,
         apiKey: typeof data['apiKey'] === 'string' ? data['apiKey'] : DEFAULT_SETTINGS.apiKey,
         // 許可リスト外の値はデフォルトにフォールバック
         aiModel: validateAiModel(data['aiModel']),
