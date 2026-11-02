@@ -4,7 +4,7 @@
 
 import type { BackgroundMessage, ContentMessage } from '../types/messages.js';
 import { extractPageContent } from './extract.js';
-import { initFloatingButton, setFloatingEnabled } from './floating.js';
+import { initFloatingButton, setFloatingEnabled, setAutoExplainEnabled } from './floating.js';
 import type { SelectionContext } from './selection-context.js';
 
 /** 自動解説に渡す選択テキストの上限文字数 */
@@ -25,7 +25,7 @@ interface AutoExplainState {
 }
 
 let autoExplainState: AutoExplainState | null = null;
-let enabled = false;
+let autoExplainEnabled = false;
 let enabledRevision = 0;
 let contextInvalidated = false;
 let disposeFloating: (() => void) | undefined;
@@ -35,16 +35,17 @@ function handleInvalidatedContext(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   if (!message.includes('Extension context invalidated')) return false;
   contextInvalidated = true;
-  enabled = false;
+  autoExplainEnabled = false;
   autoExplainState = null;
   disposeFloating?.();
   return true;
 }
-setFloatingEnabled(false);
+setFloatingEnabled(true);
+setAutoExplainEnabled(false);
 function applyEnabled(value: unknown): void {
-  enabled = !contextInvalidated && value !== false;
-  setFloatingEnabled(enabled);
-  if (!enabled) autoExplainState = null;
+  autoExplainEnabled = !contextInvalidated && value !== false;
+  setAutoExplainEnabled(autoExplainEnabled);
+  if (!autoExplainEnabled) autoExplainState = null;
 }
 // 初回読み込み中に発生した設定変更を古い読み込み結果で上書きしない。
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -59,7 +60,7 @@ chrome.storage.local.get(['enabled'], (data) => {
 
 /** 応答を待たない background への送信（失敗はログのみ） */
 async function notifyBackground(message: BackgroundMessage): Promise<void> {
-  if (!enabled) return;
+  if (contextInvalidated) return;
   try {
     // sendMessage 自体の同期例外と Promise の拒否の両方を捕捉する。
     const response = await chrome.runtime.sendMessage(message) as { error?: string } | undefined;
@@ -96,7 +97,7 @@ function buildExplainMessage(text: string, context: SelectionContext): Backgroun
 // 選択が確定したら自動解説し、Explain ボタンと同じく Side Panel を開いて結果を Chat にも投稿する。
 // Explain ボタンは Side Panel を開く。解説済みなら Side Panel で解説をやり直さない（二重投稿・二重 API 呼び出しの防止）。
 disposeFloating = initFloatingButton(() => {
-  if (!enabled) return;
+  if (contextInvalidated) return;
   const selectedText = window.getSelection()?.toString() ?? '';
   if (!selectedText.trim()) return;
   const state = autoExplainState?.text === selectedText ? autoExplainState : null;
@@ -115,13 +116,13 @@ disposeFloating = initFloatingButton(() => {
   // 自動解説が失敗した / 走っていない: 従来どおり Side Panel 側で解説を実行する
   notifyBackground({ type: 'FLOATING_EXPLAIN_REQUEST', selectionText: selectedText });
 }, async (selectedText, context) => {
-  if (!enabled) return '';
+  if (contextInvalidated || !autoExplainEnabled) return '';
   const state: AutoExplainState = { text: selectedText, status: 'pending' };
   autoExplainState = state;
   // Explain ボタンと同じく Side Panel を開く。sidePanel.open() はユーザー操作（選択を終えたマウスアップ等）から
   // 数秒以内の呼び出ししか許されないため、解説の完了を待たずに開始時点で開く（結果は完了後に Chat へ届く）
   notifyBackground({ type: 'OPEN_SIDE_PANEL' });
-  if (!enabled) return '';
+  if (contextInvalidated || !autoExplainEnabled) return '';
   const text = selectedText.trim().slice(0, AUTO_EXPLAIN_MAX_CHARS);
   try {
     const response = await chrome.runtime.sendMessage(buildExplainMessage(text, context)) as
@@ -148,8 +149,8 @@ disposeFloating = initFloatingButton(() => {
 });
 
 chrome.runtime.onMessage.addListener((message: ContentMessage, _sender, sendResponse) => {
-  if (!enabled) {
-    sendResponse({ error: 'Browser AI is Off. Turn it on to continue.' });
+  if (contextInvalidated) {
+    sendResponse({ error: 'Extension context invalidated. Reload the page to continue.' });
     return true;
   }
   switch (message.type) {

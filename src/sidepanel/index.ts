@@ -36,13 +36,6 @@ function updateUrlDisplay(url: string): void {
 async function checkAndShowApiKeyWarning(): Promise<void> {
   const settings = await loadSettings();
   const hasKey = settings.apiKey.trim().length > 0;
-  const disabledNotice = document.getElementById('disabledNotice');
-  disabledNotice?.classList.toggle('hidden', settings.enabled);
-  if (!settings.enabled) {
-    $e('mainContent').classList.add('hidden');
-    $e('apiKeyWarning').classList.add('hidden');
-    return;
-  }
   const warning = $e('apiKeyWarning');
   const mainContent = $e('mainContent');
 
@@ -125,7 +118,7 @@ if (outputLangSel) {
 // Options ページでの変更を Side Panel に同期する（chrome.storage.onChanged）
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if ('enabled' in changes || 'apiKey' in changes) void checkAndShowApiKeyWarning();
+  if ('apiKey' in changes) void checkAndShowApiKeyWarning();
   if ('outputLanguage' in changes) {
     const newVal = changes['outputLanguage']?.newValue;
     applyOutputLanguageToSelect(validateOutputLanguage(newVal));

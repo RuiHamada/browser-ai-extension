@@ -227,17 +227,16 @@ describe('background メッセージルータ', () => {
   });
 });
 
-it('Off では API・パネル起動・自動解説結果の配信を止め、設定操作は許可する', async () => {
+it('自動解説が Off でもパネル起動と手動 Explain を許可する', async () => {
   mock.storage.local._data['enabled'] = false;
   mock.storage.onChanged._trigger({ enabled: { newValue: false } }, 'local');
   for (const message of [
-    { type: 'CHAT', userMessage: 'hello', pageContent: '', history: [] },
     { type: 'OPEN_SIDE_PANEL' },
     { type: 'FLOATING_EXPLAIN_REQUEST', selectionText: 'hello' },
     { type: 'FLOATING_EXPLAIN_RESULT', selectionText: 'hello', explanation: 'result' },
-  ]) expect(await callListener(message, { tab: { id: 1 } })).toHaveProperty('error');
-  expect(mock.sidePanel.open).not.toHaveBeenCalled();
-  expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
+  ]) expect(await callListener(message, { tab: { id: 1 } })).not.toHaveProperty('error');
+  expect(mock.sidePanel.open).toHaveBeenCalled();
+  expect(mock.runtime.sendMessage).toHaveBeenCalled();
   expect(await callListener({ type: 'SIDE_PANEL_READY' })).toEqual({ pending: null });
   expect(await callListener({ type: 'SAVE_SETTINGS', settings: { enabled: true } })).toEqual({ ok: true });
   expect(mock.storage.local._data['enabled']).toBe(true);

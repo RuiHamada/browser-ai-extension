@@ -31,6 +31,16 @@ let lastAutoExplainText: string | null = null;
 let explainRequestId = 0;
 let selectingWithPointer = false;
 let enabled = true;
+let autoExplainEnabled = true;
+
+/** 自動解説だけを切り替え、表示中のボタンと読み上げは維持する。 */
+export function setAutoExplainEnabled(value: boolean): void {
+  autoExplainEnabled = value;
+  if (!value) {
+    explainRequestId++;
+    lastAutoExplainText = null;
+  }
+}
 
 /** Off はタイマー待機中の選択・読み上げにも即時反映する。 */
 export function setFloatingEnabled(value: boolean): void {
@@ -458,7 +468,7 @@ function evaluateSelection(onExplain: () => void, onAutoExplain: (text: string, 
 
   // Speak には raw text（trim 前）を渡す
   showFloatingButton(rect, onExplain, rawText);
-  if (!selectingWithPointer && rawText !== lastAutoExplainText) {
+  if (autoExplainEnabled && !selectingWithPointer && rawText !== lastAutoExplainText) {
     startAutoExplain(rawText, getSelectionContext(selection), onAutoExplain);
   }
 }

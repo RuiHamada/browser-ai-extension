@@ -298,7 +298,7 @@ it('Off は待機中の選択に即時反映され、On に戻すと再開する
   await advanceDebounce();
   expect(mock.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'CHAT' }));
   mock.storage.onChanged._trigger({ enabled: { newValue: false } }, 'local');
-  expect(document.getElementById('browser-ai-floating-host')?.style.display).toBe('none');
+  expect(document.getElementById('browser-ai-floating-host')?.style.display).toBe('block');
 });
 
 it('Off にする前の応答は On に戻しても投稿しない', async () => {
@@ -363,4 +363,25 @@ it('選択確定の mouseup 内でタイマーを待たずにパネルを要求�
   expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
   document.dispatchEvent(new MouseEvent('mouseup'));
   expect(mock.runtime.sendMessage).toHaveBeenCalledWith({ type: 'OPEN_SIDE_PANEL' });
+});
+
+
+it('自動解説が Off でも Explain と Speak を実行できる', async () => {
+  const speak = vi.fn();
+  vi.stubGlobal('speechSynthesis', { speak, cancel: vi.fn(), speaking: false });
+  vi.stubGlobal('SpeechSynthesisUtterance', class { constructor(public text: string) {} });
+  try {
+    mock.storage.onChanged._trigger({ enabled: { newValue: false } }, 'local');
+    mockSelection('selected text');
+    document.dispatchEvent(new Event('mouseup'));
+    await advanceDebounce();
+    expect(mock.runtime.sendMessage).not.toHaveBeenCalled();
+    const shadow = document.getElementById('browser-ai-floating-host')!.shadowRoot!;
+    (shadow.querySelector('#speakBtn') as HTMLButtonElement).click();
+    expect(speak).toHaveBeenCalledWith(expect.objectContaining({ text: 'selected text' }));
+    (shadow.querySelector('#explainBtn') as HTMLButtonElement).click();
+    expect(mock.runtime.sendMessage).toHaveBeenCalledWith({ type: 'FLOATING_EXPLAIN_REQUEST', selectionText: 'selected text' });
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

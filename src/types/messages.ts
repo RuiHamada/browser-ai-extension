@@ -16,7 +16,7 @@ export type OutputLanguage = 'en' | 'ja';
 
 // 拡張機能の設定
 export interface Settings {
-  /** 拡張機能全体の有効状態 */
+  /** ハイライト時の自動解説の有効状態（既存の保存キーを維持） */
   enabled: boolean;
   apiKey: string;
   /** 利用可能なモデル ID のみ許可（許可リスト外はストレージ読み込み時にフォールバック） */

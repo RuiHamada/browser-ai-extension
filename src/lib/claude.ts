@@ -33,7 +33,6 @@ export interface ClaudeResponse {
 export async function callClaudeAPI(payload: ClaudePayload): Promise<ClaudeResponse> {
   const settings = await loadSettings();
 
-  if (!settings.enabled) throw new Error('Browser AI is Off. Turn it on to continue.');
 
   // APIキー未設定チェック（F-010）
   if (!settings.apiKey.trim()) {

@@ -90,3 +90,10 @@ describe('content script', () => {
     expect(typeof result.originalLength).toBe('number');
   });
 });
+
+
+it('自動解説が Off でもページ本文と選択を取得できる', async () => {
+  mock.storage.onChanged._trigger({ enabled: { newValue: false } }, 'local');
+  expect(await callListener({ type: 'GET_PAGE_CONTENT' })).toHaveProperty('content');
+  expect(await callListener({ type: 'GET_SELECTED_TEXT' })).toHaveProperty('selectedText');
+});

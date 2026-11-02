@@ -35,13 +35,6 @@ async function checkApiKey(): Promise<void> {
   if (toggle) { toggle.checked = settings.enabled; toggle.disabled = false; }
   const label = document.getElementById('enabledLabel');
   if (label) label.textContent = settings.enabled ? 'On' : 'Off';
-  (document.getElementById('openPanel') as HTMLButtonElement).disabled = !settings.enabled;
-  if (!settings.enabled) {
-    statusEl.textContent = 'Browser AI is Off';
-    statusEl.style.color = '#9ca3af';
-    warningEl.classList.add('hidden');
-    return;
-  }
   if (!hasKey) {
     statusEl.textContent = 'API key not set';
     statusEl.style.color = '#ef4444';
@@ -55,7 +48,7 @@ async function checkApiKey(): Promise<void> {
 
 checkApiKey();
 
-// 全タブで共有する有効状態を保存する。
+// 全タブで共有するハイライト時の自動解説の有効状態を保存する。
 document.getElementById('enabled')?.addEventListener('change', async (event) => {
   const toggle = event.target as HTMLInputElement;
   toggle.disabled = true;
